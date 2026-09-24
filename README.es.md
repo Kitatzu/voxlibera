@@ -125,11 +125,39 @@ Medimos la Live API con charlas reales de Nerdearla antes de escribir el pipelin
 | Requests de traducción por día | 150K RPD | ~8–10 oraciones/min por escenario → 10 escenarios × 8 h ≈ 48K requests. |
 | Latencia de traducción | ~1 s | Medido: el subtítulo traducido aparece ~0,6 s después de que termina la oración. |
 
-Para ir más allá:
+### Crecer paso a paso
 
-1. **Más escenarios de los que permite una key** → correr varias instancias del servidor, cada una con su propio `VOXLIBERA_ROOMS_FILE` y API key (repartir escenarios entre instancias).
-2. **Muchos miles de espectadores** → correr varias réplicas de la misma instancia detrás de un balanceador y reemplazar el [`Broadcaster`](voxlibera/broadcaster.py) en memoria por Redis Pub/Sub (mismos tres métodos: `publish`, `subscribe`, `unsubscribe`).
-3. **Las fuentes de audio** son procesos independientes, una por escenario, en cualquier lugar de la red.
+Elige la configuración más chica que cubra tu evento; cada paso mantiene el mismo código y las mismas URLs.
+
+| Tamaño del evento | Configuración | Qué cambia |
+|---|---|---|
+| **1–3 escenarios**, un meetup | `voxlibera-server` en una notebook, el público en el Wi-Fi del lugar | Nada. Se transmite desde el navegador. |
+| **Hasta ~25 escenarios** | Un servidor (VM o `docker compose`) detrás de HTTPS, una API key | Definir `VOXLIBERA_ADMIN_KEY`. Una fuente de audio por escenario (navegador o CLI). |
+| **Más de ~25 escenarios** | **Repartir escenarios entre instancias.** Cada instancia tiene su parte de `rooms.yaml` y su API key. Un proxy reverso enruta por id de sala. | Solo configuración (ver abajo). Sin cambios de código. |
+| **Miles de espectadores por escenario** | Varias réplicas de una instancia detrás de un balanceador; reemplazar el difusor en memoria por **Redis Pub/Sub**. | ~40 líneas: la interfaz del [`Broadcaster`](voxlibera/broadcaster.py) son 3 métodos (`publish`, `subscribe`, `unsubscribe`). |
+| **Varios eventos / ciudades** | Un despliegue por evento, o por región para tener el audio cerca del endpoint de Gemini. | Solo despliegue. |
+
+**Ejemplo de reparto** (nginx): todas las URLs llevan el id de la sala (`/ws/ingest/<sala>`,
+`/ws/rooms/<sala>`, `/api/rooms/<sala>/...`), así que enrutar es una tabla de búsqueda.
+
+```nginx
+map $uri $voxlibera_backend {
+    ~/(main-stage|stage-b|stage-c)(/|$)   instance_a:8000;   # rooms-a.yaml, key A
+    ~/(stage-d|stage-e|workshop-1)(/|$)   instance_b:8000;   # rooms-b.yaml, key B
+    default                               instance_a:8000;
+}
+```
+
+**Por qué escala así:**
+
+- **La transcripción y la traducción corren en Gemini.** El servidor solo mueve audio y texto, así que una VM chica maneja muchos escenarios. El límite real es la cuota de la API por key; por eso se reparten los escenarios por key.
+- **Cada escenario es independiente.** Una sesión de Gemini y un pipeline por escenario, sin estado compartido entre escenarios. Si uno falla, no afecta a los demás, y agregar un escenario es una línea en `rooms.yaml`.
+- **Las fuentes de audio son procesos independientes** (una pestaña del navegador o la CLI), una por escenario, en cualquier lugar de la red.
+- **El tráfico del público es mínimo.** Unos pocos mensajes JSON cortos por segundo por escenario, distribuidos por WebSockets. El frontend estático se puede servir desde un CDN.
+
+> Todavía sin pruebas de carga: la capacidad de espectadores por instancia es una estimación. Antes
+> de un evento grande, conviene correr una prueba de carga de WebSockets (por ejemplo, con k6) contra
+> `/ws/rooms/<sala>` con el tamaño de público esperado.
 
 ### Costo
 
@@ -210,6 +238,31 @@ pytest
 | [`voxlibera/server.py`](voxlibera/server.py) | API REST + WebSocket con FastAPI, frontend estático. |
 | [`voxlibera/source.py`](voxlibera/source.py) | CLI de fuente de audio (archivo, micrófono, stream, YouTube). |
 | [`web/`](web/) | Vista del público, página de transmisión, overlay de OBS, panel. HTML/JS sin build, funciona offline. Textos de la interfaz en [`web/i18n.js`](web/i18n.js). |
+
+## Mejoras futuras
+
+Ideas para las próximas iteraciones, más o menos por impacto.
+
+**Para el público**
+- [ ] **Audio traducido para auriculares**: `gemini-3.5-live-translate` ya genera voz; ofrecerlo como canal de audio por idioma.
+- [ ] **Opciones de accesibilidad**: tema de alto contraste, tipografía para dislexia, interlineado, búsqueda en el historial de subtítulos.
+- [ ] **Códigos QR** por escenario e idioma, generados desde el panel, listos para imprimir.
+
+**Para producción**
+- [ ] **Editar el glosario desde el panel** sin reiniciar, y **cargarlo desde la agenda del evento**: los nombres de oradores y las palabras clave cambian solos cuando empieza cada charla.
+- [ ] **Una transcripción por charla**: separar y exportar los archivos automáticamente según la agenda.
+- [ ] **Persona en el circuito**: un voluntario corrige en vivo una palabra mal reconocida y la corrección se suma al glosario.
+- [ ] **Exportar métricas** (Prometheus / OpenTelemetry) y alertas cuando un escenario queda en silencio o falla repetidamente.
+
+**Para escala e independencia**
+- [ ] **Difusor con Redis Pub/Sub**, incluido y probado, para despliegues con varias réplicas.
+- [ ] **Modo 100% local** con Gemma o Whisper, para eventos sin presupuesto o sin internet. El transcriptor y el traductor son módulos aislados para facilitar ese cambio.
+- [ ] **Pruebas de carga** en CI, más plantillas de despliegue en un clic (Cloud Run, Fly.io, Render).
+- [ ] **Más idiomas de entrada** (charlas en portugués, por ejemplo): el modelo ya detecta el idioma automáticamente; falta probarlo y ajustarlo.
+
+**Para la calidad**
+- [ ] **Volver a traducir la transcripción final** al exportar, para que los SRT usen el texto más preciso.
+- [ ] **Identificar oradores**, cuando la Live API soporte diarización.
 
 ## Limitaciones conocidas
 

@@ -124,11 +124,38 @@ We measured the Live API with real Nerdearla talks before writing the pipeline.
 | Translation requests per day | 150K RPD | ~8–10 sentences/min per stage → 10 stages × 8 h ≈ 48K requests. |
 | Translation latency | ~1 s | Measured: the translated caption appears ~0.6 s after the sentence ends. |
 
-To go further:
+### Growing step by step
 
-1. **More stages than one key allows** → run several server instances, each with its own `VOXLIBERA_ROOMS_FILE` and API key (shard stages across instances).
-2. **Many thousands of viewers** → run several replicas of the same instance behind a load balancer and swap the in-memory [`Broadcaster`](voxlibera/broadcaster.py) for Redis Pub/Sub (same three methods: `publish`, `subscribe`, `unsubscribe`).
-3. **Audio sources** are independent processes, one per stage, anywhere on the network.
+Pick the smallest setup that covers your event; every step keeps the same code and URLs.
+
+| Event size | Setup | What changes |
+|---|---|---|
+| **1–3 stages**, a meetup | `voxlibera-server` on a laptop, audience on the venue Wi-Fi | Nothing. Broadcast from the browser. |
+| **Up to ~25 stages** | One server (VM or `docker compose`) behind HTTPS, one API key | Set `VOXLIBERA_ADMIN_KEY`. One audio source per stage (browser or CLI). |
+| **More than ~25 stages** | **Shard stages across instances.** Each instance gets its own `rooms.yaml` subset and API key. A reverse proxy routes by room id. | Only config (see below). No code changes. |
+| **Thousands of viewers per stage** | Several replicas of one instance behind a load balancer; swap the in-memory broadcaster for **Redis Pub/Sub**. | ~40 lines: the [`Broadcaster`](voxlibera/broadcaster.py) interface is 3 methods (`publish`, `subscribe`, `unsubscribe`). |
+| **Several events / cities** | One deployment per event, or per region to keep audio close to the Gemini endpoint. | Only deployment. |
+
+**Sharding example** (nginx): every URL carries the room id (`/ws/ingest/<room>`, `/ws/rooms/<room>`,
+`/api/rooms/<room>/...`), so routing is a lookup table.
+
+```nginx
+map $uri $voxlibera_backend {
+    ~/(main-stage|stage-b|stage-c)(/|$)   instance_a:8000;   # rooms-a.yaml, key A
+    ~/(stage-d|stage-e|workshop-1)(/|$)   instance_b:8000;   # rooms-b.yaml, key B
+    default                               instance_a:8000;
+}
+```
+
+**Why it scales this way:**
+
+- **Transcription and translation run in Gemini.** The server only moves audio and text, so a small VM handles many stages. The real limit is the API quota per key, which is why stages are sharded by key.
+- **Each stage is independent.** One Gemini session and one pipeline per stage, with no shared state between stages. A failing stage never affects the others, and adding a stage is one line in `rooms.yaml`.
+- **Audio sources are independent processes** (a browser tab or the CLI), one per stage, anywhere on the network.
+- **Audience traffic is tiny.** A few short JSON messages per second per stage, fanned out over WebSockets. The static frontend can be served from a CDN.
+
+> Not load-tested yet: viewer capacity per instance is an estimate. Before a big event, run a
+> WebSocket load test (e.g. k6) against `/ws/rooms/<room>` with the expected audience size.
 
 ### Cost
 
@@ -208,6 +235,31 @@ pytest
 | [`voxlibera/server.py`](voxlibera/server.py) | FastAPI REST + WebSocket API, static frontend. |
 | [`voxlibera/source.py`](voxlibera/source.py) | Audio source CLI (file, mic, stream, YouTube). |
 | [`web/`](web/) | Audience view, broadcast page, OBS overlay, dashboard. Plain HTML/JS, no build step, works offline. UI strings in [`web/i18n.js`](web/i18n.js). |
+
+## Future improvements
+
+Ideas for the next iterations, roughly by impact.
+
+**For the audience**
+- [ ] **Translated audio for headphones**: `gemini-3.5-live-translate` already produces speech; offer it as an audio channel per language.
+- [ ] **Accessibility options**: high-contrast theme, dyslexia-friendly font, line spacing, caption history search.
+- [ ] **QR codes** per stage and language, generated from the dashboard, ready to print.
+
+**For production**
+- [ ] **Edit the glossary from the dashboard** without restarting, and **load it from the event agenda**: speaker names and talk keywords switch automatically when each talk starts.
+- [ ] **One transcript per talk**: split and export files automatically using the schedule.
+- [ ] **Human in the loop**: a volunteer can fix a misrecognized word live, and the fix goes into the glossary.
+- [ ] **Metrics export** (Prometheus / OpenTelemetry) and alerts when a stage goes silent or keeps failing.
+
+**For scale and independence**
+- [ ] **Redis Pub/Sub broadcaster**, included and tested, for multi-replica deployments.
+- [ ] **Fully local mode** with Gemma or Whisper for events with no budget or no internet. The transcriber and translator are isolated modules for this swap.
+- [ ] **Load tests** in CI, plus one-click deploy templates (Cloud Run, Fly.io, Render).
+- [ ] **More input languages** (Portuguese talks, for example): the model already detects the language automatically; this needs testing and tuning.
+
+**For quality**
+- [ ] **Retranslate the final transcript** when exporting, so SRT files use the most accurate text.
+- [ ] **Speaker labels**, once the Live API supports diarization.
 
 ## Known limitations
 
