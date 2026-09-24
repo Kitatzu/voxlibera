@@ -116,21 +116,36 @@
     let interimLine = "";
     let clearTimerId = null;
 
+    const segmentsById = new Map();
+
+    function refreshCommittedLines() {
+      // Segments are upserted (original first, then with translations), so derive lines from state.
+      committedLines = [...segmentsById.values()]
+        .sort((first, second) => first.id - second.id)
+        .map((segment) => textForLanguage(segment))
+        .filter((text) => text)
+        .slice(-maximumLineCount);
+    }
+
     function startOverlay() {
       const captionsClient = new CaptionsClient(roomId);
       captionsClient.onHistoryReplaced = (orderedSegments) => {
-        committedLines = orderedSegments
-          .map((segment) => textForLanguage(segment))
-          .filter((text) => text !== null)
-          .slice(-maximumLineCount);
+        segmentsById.clear();
+        for (const segment of orderedSegments.slice(-20)) {
+          segmentsById.set(segment.id, segment);
+        }
+        refreshCommittedLines();
         renderOverlay();
       };
       captionsClient.onSegmentUpserted = (segment) => {
-        const text = textForLanguage(segment);
-        if (text !== null) {
-          committedLines.push(text);
-          committedLines = committedLines.slice(-maximumLineCount);
-          renderOverlay();
+        const isNewSegment = !segmentsById.has(segment.id);
+        segmentsById.set(segment.id, segment);
+        while (segmentsById.size > 20) {
+          segmentsById.delete(segmentsById.keys().next().value);
+        }
+        refreshCommittedLines();
+        renderOverlay();
+        if (isNewSegment) {
           resetSilenceTimer();
         }
       };
