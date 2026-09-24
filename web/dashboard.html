@@ -142,6 +142,27 @@
     .empty-state {
       color: var(--color-text-dimmed);
     }
+
+    .last-heard {
+      border-left: 3px solid var(--color-accent, #4f8cff);
+      padding: 0.4rem 0.6rem;
+      margin: 0.5rem 0 0.25rem;
+      font-size: 0.9rem;
+    }
+
+    .last-heard-label {
+      color: var(--color-text-dimmed);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.2rem;
+    }
+
+    .last-heard-translation {
+      color: var(--color-text-dimmed);
+      font-style: italic;
+      margin-top: 0.2rem;
+    }
   </style>
 </head>
 <body>
@@ -177,6 +198,7 @@
     const downloadFormatByRoomId = new Map();
     const downloadLanguageByRoomId = new Map();
     const cardErrorByRoomId = new Map();
+    const selectedSampleByRoomId = new Map();
     let lastRoomsData = null;
     let errorBannerVisible = false;
 
@@ -220,7 +242,16 @@
       let totalCostUsd = 0;
       for (const room of rooms) {
         totalCostUsd += room.estimated_cost_usd || 0;
-        roomsGrid.appendChild(buildRoomCard(room, languages));
+        try {
+          roomsGrid.appendChild(buildRoomCard(room, languages));
+        } catch (renderError) {
+          // One bad card must never blank the whole dashboard.
+          console.error("Could not render room card", room.id, renderError);
+          const fallbackElement = document.createElement("div");
+          fallbackElement.className = "card";
+          fallbackElement.textContent = `${room.name}: ${statusLabel(room.status)}`;
+          roomsGrid.appendChild(fallbackElement);
+        }
       }
       totalCostRow.textContent = t("dashboard.totalEstimatedCost", { cost: formatCost(totalCostUsd) });
     }
@@ -259,10 +290,11 @@
       appendMetric(metricsListElement, t("dashboard.sessionsOpened"), String(room.sessions_opened));
       appendMetric(metricsListElement, t("dashboard.rotations"), String(room.rotations));
       appendMetric(metricsListElement, t("dashboard.errors"), String(room.errors));
-      appendMetric(metricsListElement, t("dashboard.captionLag"), `${room.caption_lag_seconds.toFixed(1)}s`);
-      appendMetric(metricsListElement, t("dashboard.translationLatency"), `${room.translation_latency_ms}ms`);
-      appendMetric(metricsListElement, t("dashboard.estimatedCost"), formatCost(room.estimated_cost_usd));
+      appendMetric(metricsListElement, t("dashboard.captionLag"), formatOptional(room.caption_lag_seconds, (value) => `${value.toFixed(1)}s`));
+      appendMetric(metricsListElement, t("dashboard.translationLatency"), formatOptional(room.translation_latency_ms, (value) => `${Math.round(value)}ms`));
+      appendMetric(metricsListElement, t("dashboard.estimatedCost"), formatCost(room.estimated_cost_usd || 0));
       cardElement.appendChild(metricsListElement);
+      cardElement.appendChild(buildLastHeardBlock(room));
 
       if (room.last_error) {
         const lastErrorElement = document.createElement("p");
@@ -285,6 +317,37 @@
       }
 
       return cardElement;
+    }
+
+    // Metrics are null until they exist (e.g. no translation yet): show a dash instead of failing.
+    function formatOptional(value, formatter) {
+      return value === null || value === undefined ? "—" : formatter(value);
+    }
+
+    function buildLastHeardBlock(room) {
+      const blockElement = document.createElement("div");
+      blockElement.className = "last-heard";
+
+      const labelElement = document.createElement("div");
+      labelElement.className = "last-heard-label";
+      labelElement.textContent = t("dashboard.lastHeard");
+      blockElement.appendChild(labelElement);
+
+      const caption = room.last_caption;
+      const originalElement = document.createElement("div");
+      originalElement.className = "last-heard-original";
+      originalElement.textContent = caption ? caption.original : t("dashboard.nothingHeardYet");
+      blockElement.appendChild(originalElement);
+
+      const uiLanguage = getUiLanguage();
+      const translatedText = caption && caption.translations ? caption.translations[uiLanguage] : null;
+      if (translatedText && translatedText !== caption.original) {
+        const translationElement = document.createElement("div");
+        translationElement.className = "last-heard-translation";
+        translationElement.textContent = translatedText;
+        blockElement.appendChild(translationElement);
+      }
+      return blockElement;
     }
 
     function appendMetric(metricsListElement, label, value) {
@@ -321,6 +384,13 @@
         optionElement.textContent = sampleFileName;
         sampleSelectElement.appendChild(optionElement);
       }
+      // Cards are rebuilt on every poll: remember the operator's choice.
+      if (selectedSampleByRoomId.has(room.id)) {
+        sampleSelectElement.value = selectedSampleByRoomId.get(room.id);
+      }
+      sampleSelectElement.addEventListener("change", () => {
+        selectedSampleByRoomId.set(room.id, sampleSelectElement.value);
+      });
       rowElement.appendChild(sampleSelectElement);
 
       const simulateButtonElement = document.createElement("button");
