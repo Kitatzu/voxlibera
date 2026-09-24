@@ -51,7 +51,7 @@ async function fetchSamples() {
 }
 
 async function simulateRoom(roomId, sampleFileName) {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/simulate`, {
+  const response = await adminFetch(`/api/rooms/${encodeURIComponent(roomId)}/simulate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sample: sampleFileName }),
@@ -63,7 +63,7 @@ async function simulateRoom(roomId, sampleFileName) {
 }
 
 async function stopRoom(roomId) {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/stop`, {
+  const response = await adminFetch(`/api/rooms/${encodeURIComponent(roomId)}/stop`, {
     method: "POST",
   });
   if (!response.ok) {
@@ -72,9 +72,152 @@ async function stopRoom(roomId) {
   return response.json();
 }
 
+async function resetRoom(roomId) {
+  const response = await adminFetch(`/api/rooms/${encodeURIComponent(roomId)}/reset`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    const error = new Error(responseText || `POST reset failed with status ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
 function exportUrl(roomId, format, languageCode) {
   const searchParameters = new URLSearchParams({ format, lang: languageCode });
   return `/api/rooms/${encodeURIComponent(roomId)}/export?${searchParameters.toString()}`;
+}
+
+/**
+ * Admin key helpers.
+ *
+ * The server may require an admin key for room-changing actions
+ * (simulate, stop, reset, ingest). When required, `GET /api/rooms` reports
+ * `admin_required: true`. REST calls send the key via the `X-Admin-Key`
+ * header; the ingest WebSocket sends it as a `token` query parameter.
+ */
+const ADMIN_KEY_STORAGE_KEY = "voxlibera.adminKey";
+
+function getAdminKey() {
+  try {
+    return localStorage.getItem(ADMIN_KEY_STORAGE_KEY) || "";
+  } catch (storageError) {
+    return "";
+  }
+}
+
+function setAdminKey(adminKey) {
+  try {
+    if (adminKey) {
+      localStorage.setItem(ADMIN_KEY_STORAGE_KEY, adminKey);
+    } else {
+      localStorage.removeItem(ADMIN_KEY_STORAGE_KEY);
+    }
+  } catch (storageError) {
+    // Ignore storage failures (private browsing, quota, etc.)
+  }
+}
+
+function promptForAdminKey(promptMessage) {
+  const enteredKey = window.prompt(promptMessage || "Enter the admin key");
+  const trimmedKey = (enteredKey || "").trim();
+  setAdminKey(trimmedKey);
+  return trimmedKey;
+}
+
+/**
+ * fetch() wrapper that attaches the admin key header and retries once
+ * after prompting the operator if the server responds with 401.
+ */
+async function adminFetch(url, options) {
+  const requestOptions = Object.assign({}, options || {});
+  const headers = new Headers(requestOptions.headers || {});
+  const adminKey = getAdminKey();
+  if (adminKey) {
+    headers.set("X-Admin-Key", adminKey);
+  }
+  requestOptions.headers = headers;
+
+  let response = await fetch(url, requestOptions);
+  if (response.status === 401) {
+    const enteredKey = promptForAdminKey("This action needs the admin key. Enter it:");
+    if (enteredKey) {
+      headers.set("X-Admin-Key", enteredKey);
+      requestOptions.headers = headers;
+      response = await fetch(url, requestOptions);
+    }
+  }
+  return response;
+}
+
+/**
+ * Wires a small "Admin key" button that lets the operator set, change, or
+ * clear the stored admin key. Safe to call even when no key is required.
+ */
+function setupAdminKeyButton(buttonElement) {
+  buttonElement.addEventListener("click", () => {
+    const currentAdminKey = getAdminKey();
+    const enteredKey = window.prompt(
+      "Admin key (leave blank to clear):",
+      currentAdminKey
+    );
+    if (enteredKey === null) {
+      return;
+    }
+    setAdminKey(enteredKey.trim());
+  });
+}
+
+/**
+ * Renders the shared top navigation bar into the element with
+ * id="top-navigation". `activePage` is one of "captions", "broadcast",
+ * "dashboard".
+ */
+function renderTopNavigation(activePage) {
+  const container = document.getElementById("top-navigation");
+  if (!container) {
+    return;
+  }
+
+  const headerElement = document.createElement("header");
+  headerElement.className = "top-nav";
+
+  const innerElement = document.createElement("div");
+  innerElement.className = "top-nav-inner";
+
+  const wordmarkElement = document.createElement("span");
+  wordmarkElement.className = "top-nav-wordmark";
+  wordmarkElement.textContent = "Vox Libera";
+  innerElement.appendChild(wordmarkElement);
+
+  const navigationElement = document.createElement("nav");
+  navigationElement.className = "top-nav-links";
+
+  const pages = [
+    { key: "captions", label: "Captions", href: "/" },
+    { key: "broadcast", label: "Broadcast", href: "/broadcast.html" },
+    { key: "dashboard", label: "Dashboard", href: "/dashboard.html" },
+  ];
+
+  for (const page of pages) {
+    const linkElement = document.createElement("a");
+    linkElement.className = "top-nav-link";
+    if (page.key === activePage) {
+      linkElement.classList.add("top-nav-link--active");
+      linkElement.setAttribute("aria-current", "page");
+    }
+    linkElement.href = page.href;
+    linkElement.textContent = page.label;
+    navigationElement.appendChild(linkElement);
+  }
+
+  innerElement.appendChild(navigationElement);
+  headerElement.appendChild(innerElement);
+
+  container.innerHTML = "";
+  container.appendChild(headerElement);
 }
 
 /**

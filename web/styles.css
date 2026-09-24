@@ -151,3 +151,158 @@ button.primary {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Shared top navigation, rendered by common.js renderTopNavigation(). */
+
+.top-nav {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  margin: 0 calc(var(--side-gutter) * -1);
+  padding: 0.6rem var(--side-gutter);
+}
+
+.top-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.top-nav-wordmark {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.top-nav-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.top-nav-link {
+  display: inline-block;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+
+.top-nav-link:hover {
+  border-color: var(--color-accent);
+}
+
+.top-nav-link--active {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+@media (max-width: 480px) {
+  .top-nav-inner {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .top-nav-links {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .top-nav-link {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* Large tap-friendly choice buttons, used for room/source/language pickers. */
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.choice-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 1.1rem 0.9rem;
+  min-height: 88px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.choice-button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.choice-button--selected {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+.choice-button-subtext {
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.choice-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.big-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+/* Level meter (broadcast page). */
+
+.level-meter {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.level-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--color-success);
+  transition: width 80ms linear;
+}
+
+.level-meter-fill--loud {
+  background: var(--color-warning);
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.copy-feedback {
+  color: var(--color-success);
+  font-size: 0.85rem;
+  margin-left: 0.4rem;
+}

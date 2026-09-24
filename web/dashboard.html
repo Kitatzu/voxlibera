@@ -7,13 +7,22 @@
   <link rel="stylesheet" href="styles.css" />
   <style>
     body {
-      padding-top: 1rem;
+      padding-top: 0;
       padding-bottom: 2rem;
     }
 
     h1 {
       font-size: 1.4rem;
       margin-bottom: 0.25rem;
+      margin-top: 1rem;
+    }
+
+    .page-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     .subtitle {
@@ -24,7 +33,7 @@
 
     .rooms-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 1rem;
     }
 
@@ -82,11 +91,45 @@
       align-items: center;
     }
 
+    .room-actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .simulate-row select {
+      max-width: 160px;
+    }
+
     .room-links {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem 1rem;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      align-items: center;
+    }
+
+    .download-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
       margin-top: 0.6rem;
+      align-items: center;
+    }
+
+    .download-row select {
+      max-width: 140px;
+    }
+
+    .card-error {
+      color: var(--color-error);
+      font-size: 0.85rem;
+      margin-top: 0.6rem;
+    }
+
+    .copy-feedback {
+      color: var(--color-success);
       font-size: 0.85rem;
     }
 
@@ -102,8 +145,15 @@
   </style>
 </head>
 <body>
-  <h1>Vox Libera — Dashboard</h1>
-  <p class="subtitle">Live monitoring, refreshed every 2 seconds.</p>
+  <div id="top-navigation"></div>
+
+  <div class="page-header-row">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="subtitle">Live monitoring, refreshed every 2 seconds.</p>
+    </div>
+    <button id="admin-key-button" type="button">🔑 Admin key</button>
+  </div>
 
   <div id="error-banner" class="banner-error" style="display: none"></div>
 
@@ -115,11 +165,17 @@
   <script>
     const POLL_INTERVAL_MS = 2000;
 
+    renderTopNavigation("dashboard");
+    setupAdminKeyButton(document.getElementById("admin-key-button"));
+
     const errorBanner = document.getElementById("error-banner");
     const roomsGrid = document.getElementById("rooms-grid");
     const totalCostRow = document.getElementById("total-cost-row");
 
     let cachedSamples = [];
+    const downloadFormatByRoomId = new Map();
+    const downloadLanguageByRoomId = new Map();
+    const cardErrorByRoomId = new Map();
 
     async function loadSamplesOnce() {
       try {
@@ -140,10 +196,10 @@
         return;
       }
       errorBanner.style.display = "none";
-      renderRooms(roomsData.rooms);
+      renderRooms(roomsData.rooms, roomsData.languages || ["original"]);
     }
 
-    function renderRooms(rooms) {
+    function renderRooms(rooms, languages) {
       roomsGrid.innerHTML = "";
 
       if (rooms.length === 0) {
@@ -158,12 +214,12 @@
       let totalCostUsd = 0;
       for (const room of rooms) {
         totalCostUsd += room.estimated_cost_usd || 0;
-        roomsGrid.appendChild(buildRoomCard(room));
+        roomsGrid.appendChild(buildRoomCard(room, languages));
       }
       totalCostRow.textContent = `Total estimated cost: ${formatCost(totalCostUsd)}`;
     }
 
-    function buildRoomCard(room) {
+    function buildRoomCard(room, languages) {
       const cardElement = document.createElement("div");
       cardElement.className = "card";
 
@@ -203,8 +259,18 @@
         cardElement.appendChild(lastErrorElement);
       }
 
+      cardElement.appendChild(buildSimulateRow(room));
       cardElement.appendChild(buildActionsRow(room));
       cardElement.appendChild(buildLinksRow(room));
+      cardElement.appendChild(buildDownloadRow(room, languages));
+
+      const existingCardError = cardErrorByRoomId.get(room.id);
+      if (existingCardError) {
+        const cardErrorElement = document.createElement("p");
+        cardErrorElement.className = "card-error";
+        cardErrorElement.textContent = existingCardError;
+        cardElement.appendChild(cardErrorElement);
+      }
 
       return cardElement;
     }
@@ -224,9 +290,17 @@
       metricsListElement.appendChild(rowElement);
     }
 
-    function buildActionsRow(room) {
-      const actionsElement = document.createElement("div");
-      actionsElement.className = "room-actions";
+    function setCardError(roomId, message) {
+      if (message) {
+        cardErrorByRoomId.set(roomId, message);
+      } else {
+        cardErrorByRoomId.delete(roomId);
+      }
+    }
+
+    function buildSimulateRow(room) {
+      const rowElement = document.createElement("div");
+      rowElement.className = "room-actions-row simulate-row";
 
       const sampleSelectElement = document.createElement("select");
       for (const sampleFileName of cachedSamples) {
@@ -235,39 +309,76 @@
         optionElement.textContent = sampleFileName;
         sampleSelectElement.appendChild(optionElement);
       }
-      actionsElement.appendChild(sampleSelectElement);
+      rowElement.appendChild(sampleSelectElement);
 
       const simulateButtonElement = document.createElement("button");
-      simulateButtonElement.textContent = "Simulate";
+      simulateButtonElement.className = "action-button";
+      simulateButtonElement.textContent = "▶ Play sample";
       simulateButtonElement.addEventListener("click", async () => {
         simulateButtonElement.disabled = true;
+        setCardError(room.id, null);
         try {
           await simulateRoom(room.id, sampleSelectElement.value);
           await pollRooms();
         } catch (simulateError) {
-          errorBanner.textContent = `Failed to start simulation for ${room.name}.`;
-          errorBanner.style.display = "block";
+          setCardError(room.id, `Failed to start simulation: ${simulateError.message}`);
+          await pollRooms();
         } finally {
           simulateButtonElement.disabled = false;
         }
       });
-      actionsElement.appendChild(simulateButtonElement);
+      rowElement.appendChild(simulateButtonElement);
+
+      return rowElement;
+    }
+
+    function buildActionsRow(room) {
+      const actionsElement = document.createElement("div");
+      actionsElement.className = "room-actions";
+
+      const broadcastLinkElement = document.createElement("a");
+      broadcastLinkElement.className = "action-button";
+      broadcastLinkElement.href = `broadcast.html?room=${encodeURIComponent(room.id)}`;
+      broadcastLinkElement.textContent = "🎙 Broadcast";
+      actionsElement.appendChild(broadcastLinkElement);
 
       const stopButtonElement = document.createElement("button");
-      stopButtonElement.textContent = "Stop";
+      stopButtonElement.className = "action-button";
+      stopButtonElement.textContent = "■ Stop";
+      stopButtonElement.disabled = !room.source_connected;
       stopButtonElement.addEventListener("click", async () => {
         stopButtonElement.disabled = true;
+        setCardError(room.id, null);
         try {
           await stopRoom(room.id);
           await pollRooms();
         } catch (stopError) {
-          errorBanner.textContent = `Failed to stop ${room.name}.`;
-          errorBanner.style.display = "block";
-        } finally {
-          stopButtonElement.disabled = false;
+          setCardError(room.id, `Failed to stop: ${stopError.message}`);
+          await pollRooms();
         }
       });
       actionsElement.appendChild(stopButtonElement);
+
+      const clearButtonElement = document.createElement("button");
+      clearButtonElement.className = "action-button";
+      clearButtonElement.textContent = "🗑 Clear transcript";
+      clearButtonElement.disabled = room.source_connected;
+      clearButtonElement.addEventListener("click", async () => {
+        const confirmed = window.confirm("Delete this room's transcript?");
+        if (!confirmed) {
+          return;
+        }
+        clearButtonElement.disabled = true;
+        setCardError(room.id, null);
+        try {
+          await resetRoom(room.id);
+          await pollRooms();
+        } catch (resetError) {
+          setCardError(room.id, `Failed to clear transcript: ${resetError.message}`);
+          await pollRooms();
+        }
+      });
+      actionsElement.appendChild(clearButtonElement);
 
       return actionsElement;
     }
@@ -276,27 +387,84 @@
       const linksElement = document.createElement("div");
       linksElement.className = "room-links";
 
+      const openCaptionsLink = document.createElement("a");
+      openCaptionsLink.className = "action-button";
+      openCaptionsLink.href = `index.html?room=${encodeURIComponent(room.id)}&lang=original`;
+      openCaptionsLink.target = "_blank";
+      openCaptionsLink.textContent = "👁 Open captions";
+      linksElement.appendChild(openCaptionsLink);
+
       linksElement.appendChild(
-        buildLink(`Open captions`, `index.html?room=${encodeURIComponent(room.id)}&lang=original`)
+        buildCopyButton("📋 Copy audience link", `${location.origin}/index.html?room=${encodeURIComponent(room.id)}&lang=original`)
       );
       linksElement.appendChild(
-        buildLink(`OBS overlay`, `obs.html?room=${encodeURIComponent(room.id)}&lang=es`)
+        buildCopyButton("📋 Copy OBS link", `${location.origin}/obs.html?room=${encodeURIComponent(room.id)}&lang=es`)
       );
-      linksElement.appendChild(buildLink(`Export SRT`, exportUrl(room.id, "srt", "original")));
-      linksElement.appendChild(buildLink(`Export VTT`, exportUrl(room.id, "vtt", "original")));
-      linksElement.appendChild(buildLink(`Export TXT`, exportUrl(room.id, "txt", "original")));
 
       return linksElement;
     }
 
-    function buildLink(labelText, href) {
-      const linkElement = document.createElement("a");
-      linkElement.href = href;
-      linkElement.textContent = labelText;
-      if (href.startsWith("index.html") || href.startsWith("obs.html")) {
-        linkElement.target = "_blank";
+    function buildCopyButton(labelText, urlToCopy) {
+      const wrapperElement = document.createElement("span");
+
+      const buttonElement = document.createElement("button");
+      buttonElement.className = "action-button";
+      buttonElement.textContent = labelText;
+      wrapperElement.appendChild(buttonElement);
+
+      const feedbackElement = document.createElement("span");
+      feedbackElement.className = "copy-feedback";
+      feedbackElement.textContent = "Copied!";
+      feedbackElement.style.display = "none";
+      wrapperElement.appendChild(feedbackElement);
+
+      buttonElement.addEventListener("click", () => {
+        navigator.clipboard
+          .writeText(urlToCopy)
+          .then(() => {
+            feedbackElement.style.display = "inline";
+            setTimeout(() => {
+              feedbackElement.style.display = "none";
+            }, 1500);
+          })
+          .catch(() => {});
+      });
+
+      return wrapperElement;
+    }
+
+    function buildDownloadRow(room, languages) {
+      const rowElement = document.createElement("div");
+      rowElement.className = "download-row";
+
+      const languageSelectElement = document.createElement("select");
+      for (const languageCode of languages) {
+        const optionElement = document.createElement("option");
+        optionElement.value = languageCode;
+        optionElement.textContent = languageLabel(languageCode);
+        languageSelectElement.appendChild(optionElement);
       }
-      return linkElement;
+      languageSelectElement.value = downloadLanguageByRoomId.get(room.id) || "original";
+      languageSelectElement.addEventListener("change", () => {
+        downloadLanguageByRoomId.set(room.id, languageSelectElement.value);
+      });
+      rowElement.appendChild(languageSelectElement);
+
+      rowElement.appendChild(buildDownloadButton("⬇ SRT", room, "srt", languageSelectElement));
+      rowElement.appendChild(buildDownloadButton("⬇ VTT", room, "vtt", languageSelectElement));
+      rowElement.appendChild(buildDownloadButton("⬇ TXT", room, "txt", languageSelectElement));
+
+      return rowElement;
+    }
+
+    function buildDownloadButton(labelText, room, format, languageSelectElement) {
+      const buttonElement = document.createElement("button");
+      buttonElement.className = "action-button";
+      buttonElement.textContent = labelText;
+      buttonElement.addEventListener("click", () => {
+        window.location.href = exportUrl(room.id, format, languageSelectElement.value);
+      });
+      return buttonElement;
     }
 
     async function initializeDashboard() {

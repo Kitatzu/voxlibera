@@ -180,18 +180,25 @@
   </style>
 </head>
 <body>
+  <div id="top-navigation"></div>
+
   <div id="picker-view">
     <h1>Vox Libera</h1>
     <p class="dimmed">Pick a room and a language to see live captions.</p>
     <div id="picker-error" class="banner-error" style="display: none"></div>
-    <div class="picker-field">
+
+    <div class="picker-field" id="room-select-field">
       <label for="room-select">Room</label>
       <select id="room-select"></select>
     </div>
-    <div class="picker-field">
+    <div class="choice-grid" id="room-choice-grid" hidden></div>
+
+    <div class="picker-field" id="language-select-field">
       <label for="language-select">Language</label>
       <select id="language-select"></select>
     </div>
+    <div class="choice-grid" id="language-choice-grid" hidden></div>
+
     <button id="join-button" class="primary">Join</button>
   </div>
 
@@ -238,10 +245,19 @@
     const DEFAULT_FONT_SIZE_PX = 20;
     const SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 80;
 
+    const MAX_ROOMS_FOR_CHOICE_BUTTONS = 6;
+    const MAX_LANGUAGES_FOR_CHOICE_BUTTONS = 6;
+
+    renderTopNavigation("captions");
+
     const pickerView = document.getElementById("picker-view");
     const pickerError = document.getElementById("picker-error");
+    const roomSelectField = document.getElementById("room-select-field");
     const roomSelect = document.getElementById("room-select");
+    const roomChoiceGrid = document.getElementById("room-choice-grid");
+    const languageSelectField = document.getElementById("language-select-field");
     const languageSelect = document.getElementById("language-select");
+    const languageChoiceGrid = document.getElementById("language-choice-grid");
     const joinButton = document.getElementById("join-button");
 
     const captionsView = document.getElementById("captions-view");
@@ -349,10 +365,71 @@
         languageSelect.value = requestedLanguage;
       }
 
+      buildRoomChoiceButtons(roomsData.rooms);
+      buildLanguageChoiceButtons(roomsData.languages);
+
       if (requestedRoomId && roomsData.rooms.some((room) => room.id === requestedRoomId)) {
         const selectedRoom = roomsData.rooms.find((room) => room.id === requestedRoomId);
         joinRoom(requestedRoomId, selectedRoom.name, languageSelect.value);
         return;
+      }
+    }
+
+    function buildRoomChoiceButtons(rooms) {
+      if (rooms.length === 0 || rooms.length > MAX_ROOMS_FOR_CHOICE_BUTTONS) {
+        roomChoiceGrid.hidden = true;
+        roomSelectField.hidden = false;
+        return;
+      }
+
+      roomSelectField.hidden = true;
+      roomChoiceGrid.hidden = false;
+      roomChoiceGrid.innerHTML = "";
+      for (const room of rooms) {
+        const roomButton = document.createElement("button");
+        roomButton.type = "button";
+        roomButton.className = "choice-button";
+        if (room.id === roomSelect.value) {
+          roomButton.classList.add("choice-button--selected");
+        }
+        roomButton.textContent = room.name;
+        roomButton.addEventListener("click", () => {
+          roomSelect.value = room.id;
+          markSelectedChoiceButton(roomChoiceGrid, roomButton);
+        });
+        roomChoiceGrid.appendChild(roomButton);
+      }
+    }
+
+    function buildLanguageChoiceButtons(languages) {
+      if (languages.length === 0 || languages.length > MAX_LANGUAGES_FOR_CHOICE_BUTTONS) {
+        languageChoiceGrid.hidden = true;
+        languageSelectField.hidden = false;
+        return;
+      }
+
+      languageSelectField.hidden = true;
+      languageChoiceGrid.hidden = false;
+      languageChoiceGrid.innerHTML = "";
+      for (const languageCode of languages) {
+        const languageButton = document.createElement("button");
+        languageButton.type = "button";
+        languageButton.className = "choice-button";
+        if (languageCode === languageSelect.value) {
+          languageButton.classList.add("choice-button--selected");
+        }
+        languageButton.textContent = languageLabel(languageCode);
+        languageButton.addEventListener("click", () => {
+          languageSelect.value = languageCode;
+          markSelectedChoiceButton(languageChoiceGrid, languageButton);
+        });
+        languageChoiceGrid.appendChild(languageButton);
+      }
+    }
+
+    function markSelectedChoiceButton(gridElement, selectedButtonElement) {
+      for (const buttonElement of gridElement.querySelectorAll(".choice-button")) {
+        buttonElement.classList.toggle("choice-button--selected", buttonElement === selectedButtonElement);
       }
     }
 
