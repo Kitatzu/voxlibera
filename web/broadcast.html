@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vox Libera — Broadcast</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      padding-top: 0;
+      padding-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+    }
+
+    h2 {
+      font-size: 1.05rem;
+      margin-top: 1.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .page-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+
+    .subtitle {
+      color: var(--color-text-dimmed);
+      margin-top: 0;
+    }
+
+    .step-section {
+      margin-top: 1.25rem;
+    }
+
+    .step-section[hidden] {
+      display: none;
+    }
+
+    .selected-summary {
+      color: var(--color-text-dimmed);
+      font-size: 0.9rem;
+      margin-top: -0.4rem;
+    }
+
+    .device-picker {
+      margin-top: 0.75rem;
+      max-width: 420px;
+    }
+
+    .device-picker select {
+      width: 100%;
+    }
+
+    .file-picker {
+      margin-top: 0.75rem;
+    }
+
+    .file-picker audio {
+      width: 100%;
+      margin-top: 0.75rem;
+    }
+
+    .source-message {
+      margin-top: 0.6rem;
+    }
+
+    .start-stop-row {
+      margin-top: 1rem;
+    }
+
+    #start-stop-button {
+      font-size: 1.2rem;
+      padding: 0.9rem 2rem;
+      font-weight: 800;
+    }
+
+    .live-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .live-status-item {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 0.75rem 0.9rem;
+    }
+
+    .live-status-label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--color-text-dimmed);
+      margin-bottom: 0.3rem;
+    }
+
+    .live-status-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .preview-controls-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.6rem;
+    }
+
+    #caption-preview-box {
+      margin-top: 0.75rem;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: var(--color-surface);
+    }
+
+    #caption-preview-box .segment {
+      margin-bottom: 0.6rem;
+      line-height: 1.4;
+    }
+
+    #caption-preview-interim {
+      color: var(--color-text-dimmed);
+      font-style: italic;
+    }
+
+    #reconnect-section {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="top-navigation"></div>
+
+  <div class="page-header-row">
+    <div>
+      <h1>Broadcast</h1>
+      <p class="subtitle">Send this device's audio to a room, from the browser.</p>
+    </div>
+    <button id="admin-key-button" type="button">🔑 Admin key</button>
+  </div>
+
+  <div id="error-banner" class="banner-error" style="display: none"></div>
+
+  <!-- Step 1: room -->
+  <div id="room-step" class="step-section">
+    <h2>1. Pick the room</h2>
+    <div id="room-choice-grid" class="choice-grid"></div>
+  </div>
+
+  <!-- Step 2: source -->
+  <div id="source-step" class="step-section" hidden>
+    <h2>2. Pick the audio source</h2>
+    <p class="selected-summary" id="selected-room-summary"></p>
+    <div class="choice-grid">
+      <button type="button" class="choice-button" id="source-microphone-button">
+        <span class="big-icon">🎙</span>
+        <span>Microphone</span>
+      </button>
+      <button type="button" class="choice-button" id="source-tab-button">
+        <span class="big-icon">🖥</span>
+        <span>Tab or screen audio</span>
+      </button>
+      <button type="button" class="choice-button" id="source-file-button">
+        <span class="big-icon">📁</span>
+        <span>Audio file</span>
+      </button>
+    </div>
+
+    <div id="microphone-device-picker" class="device-picker" hidden>
+      <label for="microphone-device-select">Microphone</label>
+      <select id="microphone-device-select"></select>
+    </div>
+
+    <div id="file-picker" class="file-picker" hidden>
+      <input type="file" id="audio-file-input" accept="audio/*,video/*" />
+      <audio id="audio-file-element" controls></audio>
+    </div>
+
+    <div id="source-message" class="source-message"></div>
+  </div>
+
+  <!-- Step 3: start/stop -->
+  <div id="control-step" class="step-section" hidden>
+    <h2>3. Broadcast</h2>
+    <div class="start-stop-row">
+      <button type="button" id="start-stop-button" class="primary">Start broadcasting</button>
+    </div>
+
+    <div id="live-status" class="live-status-grid" hidden>
+      <div class="live-status-item">
+        <span class="live-status-label">Elapsed</span>
+        <span class="live-status-value" id="elapsed-time-value">0:00</span>
+      </div>
+      <div class="live-status-item">
+        <span class="live-status-label">Connection</span>
+        <span class="live-status-value" id="connection-status-value">Connecting…</span>
+      </div>
+      <div class="live-status-item">
+        <span class="live-status-label">Input level</span>
+        <div class="level-meter">
+          <div class="level-meter-fill" id="level-meter-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="silence-warning" class="banner-error" style="display: none">
+      No audio detected. Check the source is actually producing sound.
+    </div>
+
+    <div id="live-close-message" class="banner-error" style="display: none"></div>
+
+    <div id="reconnect-section" hidden>
+      <button type="button" id="reconnect-button" class="primary">Reconnect</button>
+    </div>
+  </div>
+
+  <!-- Step 4: preview -->
+  <div id="preview-step" class="step-section" hidden>
+    <h2>Live caption preview</h2>
+    <div class="preview-controls-row" id="preview-language-buttons"></div>
+    <div class="preview-controls-row">
+      <button type="button" id="open-audience-view-button">Open audience view</button>
+      <button type="button" id="copy-audience-link-button">📋 Copy audience link</button>
+      <span id="copy-feedback" class="copy-feedback" style="display: none">Copied!</span>
+    </div>
+    <div id="caption-preview-box">
+      <div id="caption-preview-segments"></div>
+      <div id="caption-preview-interim"></div>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    const SILENCE_WARNING_THRESHOLD_MS = 10000;
+    const SILENCE_RMS_THRESHOLD = 0.01;
+    const INGEST_CHUNK_RMS_MAX = 1; // rootMeanSquare from the worklet is already in [0, 1].
+
+    renderTopNavigation("broadcast");
+    setupAdminKeyButton(document.getElementById("admin-key-button"));
+
+    const errorBanner = document.getElementById("error-banner");
+    const roomChoiceGrid = document.getElementById("room-choice-grid");
+    const sourceStep = document.getElementById("source-step");
+    const selectedRoomSummary = document.getElementById("selected-room-summary");
+    const sourceMicrophoneButton = document.getElementById("source-microphone-button");
+    const sourceTabButton = document.getElementById("source-tab-button");
+    const sourceFileButton = document.getElementById("source-file-button");
+    const microphoneDevicePicker = document.getElementById("microphone-device-picker");
+    const microphoneDeviceSelect = document.getElementById("microphone-device-select");
+    const filePicker = document.getElementById("file-picker");
+    const audioFileInput = document.getElementById("audio-file-input");
+    const audioFileElement = document.getElementById("audio-file-element");
+    const sourceMessage = document.getElementById("source-message");
+    const controlStep = document.getElementById("control-step");
+    const startStopButton = document.getElementById("start-stop-button");
+    const liveStatus = document.getElementById("live-status");
+    const elapsedTimeValue = document.getElementById("elapsed-time-value");
+    const connectionStatusValue = document.getElementById("connection-status-value");
+    const levelMeterFill = document.getElementById("level-meter-fill");
+    const silenceWarning = document.getElementById("silence-warning");
+    const liveCloseMessage = document.getElementById("live-close-message");
+    const reconnectSection = document.getElementById("reconnect-section");
+    const reconnectButton = document.getElementById("reconnect-button");
+    const previewStep = document.getElementById("preview-step");
+    const previewLanguageButtons = document.getElementById("preview-language-buttons");
+    const openAudienceViewButton = document.getElementById("open-audience-view-button");
+    const copyAudienceLinkButton = document.getElementById("copy-audience-link-button");
+    const copyFeedback = document.getElementById("copy-feedback");
+    const captionPreviewSegments = document.getElementById("caption-preview-segments");
+    const captionPreviewInterim = document.getElementById("caption-preview-interim");
+
+    let availableRooms = [];
+    let availableLanguages = ["original"];
+    let selectedRoomId = null;
+    let selectedRoomName = "";
+    let selectedSourceType = null; // "microphone" | "tab" | "file"
+    let microphoneStream = null;
+    let tabStream = null;
+    let selectedAudioFile = null;
+
+    let audioContext = null;
+    let workletNode = null;
+    let sourceAudioNode = null;
+    let gainNode = null;
+    let ingestSocket = null;
+    let isLive = false;
+    let elapsedIntervalId = null;
+    let broadcastStartedAtMs = 0;
+    let lastLoudTimestampMs = 0;
+    let silenceCheckIntervalId = null;
+
+    let previewLanguage = "original";
+    let previewCaptionsClient = null;
+
+    function showError(message) {
+      errorBanner.textContent = message;
+      errorBanner.style.display = "block";
+    }
+
+    function clearError() {
+      errorBanner.style.display = "none";
+      errorBanner.textContent = "";
+    }
+
+    function getQueryParameters() {
+      return new URLSearchParams(location.search);
+    }
+
+    async function initializeBroadcastPage() {
+      let roomsData;
+      try {
+        roomsData = await fetchRooms();
+      } catch (fetchError) {
+        showError("Could not reach the server. Check your connection and reload.");
+        return;
+      }
+      availableRooms = roomsData.rooms || [];
+      availableLanguages = roomsData.languages || ["original"];
+      renderRoomChoices();
+      buildPreviewLanguageButtons();
+
+      const requestedRoomId = getQueryParameters().get("room");
+      if (requestedRoomId) {
+        const requestedRoom = availableRooms.find((room) => room.id === requestedRoomId);
+        if (requestedRoom && !requestedRoom.source_connected) {
+          selectRoom(requestedRoom);
+        }
+      }
+    }
+
+    function renderRoomChoices() {
+      roomChoiceGrid.innerHTML = "";
+      for (const room of availableRooms) {
+        const roomButton = document.createElement("button");
+        roomButton.type = "button";
+        roomButton.className = "choice-button";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = room.name;
+        roomButton.appendChild(nameSpan);
+
+        const statusSpan = document.createElement("span");
+        statusSpan.className = "choice-button-subtext";
+        statusSpan.textContent = room.source_connected ? "Already live" : statusLabel(room.status);
+        roomButton.appendChild(statusSpan);
+
+        if (room.source_connected) {
+          roomButton.disabled = true;
+        }
+        if (room.id === selectedRoomId) {
+          roomButton.classList.add("choice-button--selected");
+        }
+
+        roomButton.addEventListener("click", () => selectRoom(room));
+        roomChoiceGrid.appendChild(roomButton);
+      }
+    }
+
+    function selectRoom(room) {
+      selectedRoomId = room.id;
+      selectedRoomName = room.name;
+      selectedRoomSummary.textContent = `Selected room: ${room.name}`;
+      renderRoomChoices();
+      sourceStep.hidden = false;
+    }
+
+    sourceMicrophoneButton.addEventListener("click", () => selectMicrophoneSource());
+    sourceTabButton.addEventListener("click", () => selectTabSource());
+    sourceFileButton.addEventListener("click", () => selectFileSource());
+
+    function resetSourceSelectionUi() {
+      sourceMicrophoneButton.classList.remove("choice-button--selected");
+      sourceTabButton.classList.remove("choice-button--selected");
+      sourceFileButton.classList.remove("choice-button--selected");
+      microphoneDevicePicker.hidden = true;
+      filePicker.hidden = true;
+      sourceMessage.textContent = "";
+    }
+
+    async function selectMicrophoneSource() {
+      clearError();
+      resetSourceSelectionUi();
+      sourceMicrophoneButton.classList.add("choice-button--selected");
+      try {
+        microphoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: true,
+          },
+        });
+      } catch (mediaError) {
+        sourceMessage.textContent = "Could not access the microphone. Check browser permissions.";
+        return;
+      }
+      selectedSourceType = "microphone";
+      controlStep.hidden = false;
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputDevices = devices.filter((device) => device.kind === "audioinput");
+        if (audioInputDevices.length > 1) {
+          microphoneDeviceSelect.innerHTML = "";
+          for (const device of audioInputDevices) {
+            const optionElement = document.createElement("option");
+            optionElement.value = device.deviceId;
+            optionElement.textContent = device.label || "Microphone";
+            microphoneDeviceSelect.appendChild(optionElement);
+          }
+          microphoneDevicePicker.hidden = false;
+        }
+      } catch (enumerateError) {
+        // Device listing is a nice-to-have; ignore failures.
+      }
+    }
+
+    microphoneDeviceSelect.addEventListener("change", async () => {
+      if (isLive) {
+        return;
+      }
+      try {
+        if (microphoneStream) {
+          for (const track of microphoneStream.getTracks()) {
+            track.stop();
+          }
+        }
+        microphoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: microphoneDeviceSelect.value },
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: true,
+          },
+        });
+      } catch (mediaError) {
+        sourceMessage.textContent = "Could not switch to that microphone.";
+      }
+    });
+
+    async function selectTabSource() {
+      clearError();
+      resetSourceSelectionUi();
+      sourceTabButton.classList.add("choice-button--selected");
+      let capturedStream;
+      try {
+        capturedStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+      } catch (mediaError) {
+        sourceMessage.textContent = "Screen or tab sharing was cancelled.";
+        return;
+      }
+
+      const audioTracks = capturedStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        for (const track of capturedStream.getTracks()) {
+          track.stop();
+        }
+        sourceMessage.textContent = "Share a tab and tick 'Share tab audio'.";
+        return;
+      }
+
+      for (const videoTrack of capturedStream.getVideoTracks()) {
+        videoTrack.stop();
+      }
+
+      tabStream = new MediaStream(audioTracks);
+      selectedSourceType = "tab";
+      controlStep.hidden = false;
+      sourceMessage.textContent = "Tab/screen audio captured.";
+    }
+
+    function selectFileSource() {
+      clearError();
+      resetSourceSelectionUi();
+      sourceFileButton.classList.add("choice-button--selected");
+      filePicker.hidden = false;
+    }
+
+    audioFileInput.addEventListener("change", () => {
+      const chosenFile = audioFileInput.files && audioFileInput.files[0];
+      if (!chosenFile) {
+        return;
+      }
+      selectedAudioFile = chosenFile;
+      const objectUrl = URL.createObjectURL(chosenFile);
+      audioFileElement.src = objectUrl;
+      selectedSourceType = "file";
+      controlStep.hidden = false;
+      sourceMessage.textContent = `Selected file: ${chosenFile.name}`;
+    });
+
+    startStopButton.addEventListener("click", () => {
+      if (isLive) {
+        stopBroadcasting("stopped");
+      } else {
+        startBroadcasting();
+      }
+    });
+
+    reconnectButton.addEventListener("click", () => {
+      reconnectSection.hidden = true;
+      liveCloseMessage.style.display = "none";
+      startBroadcasting();
+    });
+
+    async function startBroadcasting() {
+      if (!selectedRoomId || !selectedSourceType) {
+        return;
+      }
+      clearError();
+      startStopButton.disabled = true;
+
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        await audioContext.audioWorklet.addModule("pcm-worklet.js");
+        workletNode = new AudioWorkletNode(audioContext, "pcm-downsampler");
+        gainNode = audioContext.createGain();
+        gainNode.gain.value = 0;
+        workletNode.connect(gainNode).connect(audioContext.destination);
+
+        if (selectedSourceType === "microphone") {
+          sourceAudioNode = audioContext.createMediaStreamSource(microphoneStream);
+          sourceAudioNode.connect(workletNode);
+        } else if (selectedSourceType === "tab") {
+          sourceAudioNode = audioContext.createMediaStreamSource(tabStream);
+          sourceAudioNode.connect(workletNode);
+        } else if (selectedSourceType === "file") {
+          sourceAudioNode = audioContext.createMediaElementSource(audioFileElement);
+          sourceAudioNode.connect(workletNode);
+          sourceAudioNode.connect(audioContext.destination);
+          audioFileElement.currentTime = 0;
+          await audioFileElement.play();
+          audioFileElement.addEventListener("ended", handleFileEnded, { once: true });
+        }
+      } catch (setupError) {
+        showError("Could not set up the audio pipeline for this source.");
+        cleanupAudioGraph();
+        startStopButton.disabled = false;
+        return;
+      }
+
+      workletNode.port.onmessage = handleWorkletMessage;
+
+      openIngestSocket();
+    }
+
+    function openIngestSocket(existingAdminKey) {
+      const adminKey = existingAdminKey !== undefined ? existingAdminKey : getAdminKey();
+      const ingestPath = `/ws/ingest/${encodeURIComponent(selectedRoomId)}${
+        adminKey ? `?token=${encodeURIComponent(adminKey)}` : ""
+      }`;
+      ingestSocket = new WebSocket(buildWebSocketUrl(ingestPath));
+      ingestSocket.binaryType = "arraybuffer";
+
+      connectionStatusValue.textContent = "Connecting…";
+
+      ingestSocket.addEventListener("open", () => {
+        isLive = true;
+        startStopButton.textContent = "Stop";
+        startStopButton.disabled = false;
+        liveStatus.hidden = false;
+        connectionStatusValue.textContent = "Live";
+        broadcastStartedAtMs = Date.now();
+        lastLoudTimestampMs = Date.now();
+        elapsedIntervalId = setInterval(updateElapsedTime, 500);
+        silenceCheckIntervalId = setInterval(checkForSilence, 1000);
+        startPreview();
+      });
+
+      ingestSocket.addEventListener("close", (closeEvent) => {
+        handleIngestSocketClose(closeEvent);
+      });
+
+      ingestSocket.addEventListener("error", () => {
+        // The close event follows and carries the reason/code.
+      });
+    }
+
+    function handleWorkletMessage(messageEvent) {
+      const message = messageEvent.data;
+      if (message.type === "pcm") {
+        if (ingestSocket && ingestSocket.readyState === WebSocket.OPEN) {
+          ingestSocket.send(message.buffer);
+        }
+        return;
+      }
+      if (message.type === "level") {
+        updateLevelMeter(message.rootMeanSquare);
+      }
+    }
+
+    function updateLevelMeter(rootMeanSquare) {
+      const normalizedLevel = Math.min(1, rootMeanSquare / (INGEST_CHUNK_RMS_MAX * 0.3));
+      levelMeterFill.style.width = `${Math.round(normalizedLevel * 100)}%`;
+      levelMeterFill.classList.toggle("level-meter-fill--loud", normalizedLevel > 0.85);
+      if (rootMeanSquare >= SILENCE_RMS_THRESHOLD) {
+        lastLoudTimestampMs = Date.now();
+        silenceWarning.style.display = "none";
+      }
+    }
+
+    function checkForSilence() {
+      if (!isLive) {
+        return;
+      }
+      if (Date.now() - lastLoudTimestampMs > SILENCE_WARNING_THRESHOLD_MS) {
+        silenceWarning.style.display = "block";
+      }
+    }
+
+    function updateElapsedTime() {
+      const elapsedSeconds = (Date.now() - broadcastStartedAtMs) / 1000;
+      elapsedTimeValue.textContent = formatDuration(elapsedSeconds);
+    }
+
+    function handleFileEnded() {
+      if (isLive) {
+        stopBroadcasting("stopped");
+      }
+    }
+
+    function handleIngestSocketClose(closeEvent) {
+      const wasLive = isLive;
+      isLive = false;
+      stopCaptureAndCleanup();
+
+      startStopButton.textContent = "Start broadcasting";
+      startStopButton.disabled = false;
+      liveStatus.hidden = true;
+      silenceWarning.style.display = "none";
+
+      if (!wasLive) {
+        return;
+      }
+
+      const closeMessages = {
+        4401: "Wrong admin key.",
+        4409: "Someone is already broadcasting to this room.",
+        4404: "Unknown room.",
+      };
+
+      let message = closeMessages[closeEvent.code];
+      if (!message && closeEvent.code === 1011) {
+        message = closeEvent.reason || "The server closed the connection.";
+      }
+      if (!message && closeEvent.code !== 1000) {
+        message = closeEvent.reason || `Connection closed (code ${closeEvent.code}).`;
+      }
+
+      if (message) {
+        liveCloseMessage.textContent = message;
+        liveCloseMessage.style.display = "block";
+        reconnectSection.hidden = false;
+
+        if (closeEvent.code === 4401) {
+          promptForAdminKey("Wrong admin key. Enter the correct key:");
+        }
+      }
+    }
+
+    function stopBroadcasting(reason) {
+      if (ingestSocket) {
+        ingestSocket.close(1000, reason || "stopped");
+      }
+      isLive = false;
+      stopCaptureAndCleanup();
+      startStopButton.textContent = "Start broadcasting";
+      liveStatus.hidden = true;
+      silenceWarning.style.display = "none";
+      liveCloseMessage.style.display = "none";
+      reconnectSection.hidden = true;
+    }
+
+    function stopCaptureAndCleanup() {
+      if (elapsedIntervalId) {
+        clearInterval(elapsedIntervalId);
+        elapsedIntervalId = null;
+      }
+      if (silenceCheckIntervalId) {
+        clearInterval(silenceCheckIntervalId);
+        silenceCheckIntervalId = null;
+      }
+      cleanupAudioGraph();
+      stopPreview();
+    }
+
+    function cleanupAudioGraph() {
+      if (workletNode) {
+        workletNode.port.onmessage = null;
+        workletNode.disconnect();
+        workletNode = null;
+      }
+      if (gainNode) {
+        gainNode.disconnect();
+        gainNode = null;
+      }
+      if (sourceAudioNode) {
+        sourceAudioNode.disconnect();
+        sourceAudioNode = null;
+      }
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
+      if (selectedSourceType === "microphone" && microphoneStream) {
+        for (const track of microphoneStream.getTracks()) {
+          track.stop();
+        }
+        microphoneStream = null;
+      }
+      if (selectedSourceType === "tab" && tabStream) {
+        for (const track of tabStream.getTracks()) {
+          track.stop();
+        }
+        tabStream = null;
+      }
+      if (selectedSourceType === "file") {
+        audioFileElement.pause();
+      }
+    }
+
+    function buildPreviewLanguageButtons() {
+      previewLanguageButtons.innerHTML = "";
+      for (const languageCode of availableLanguages) {
+        const languageButton = document.createElement("button");
+        languageButton.type = "button";
+        languageButton.textContent = languageLabel(languageCode);
+        if (languageCode === previewLanguage) {
+          languageButton.classList.add("primary");
+        }
+        languageButton.addEventListener("click", () => {
+          previewLanguage = languageCode;
+          buildPreviewLanguageButtons();
+          renderCaptionPreview();
+        });
+        previewLanguageButtons.appendChild(languageButton);
+      }
+    }
+
+    function startPreview() {
+      previewStep.hidden = false;
+      const audienceUrl = `${location.origin}/?room=${encodeURIComponent(selectedRoomId)}&lang=${encodeURIComponent(previewLanguage)}`;
+      openAudienceViewButton.onclick = () => window.open(audienceUrl, "_blank");
+      copyAudienceLinkButton.onclick = () => copyAudienceLink();
+
+      previewCaptionsClient = new CaptionsClient(selectedRoomId);
+      previewCaptionsClient.onHistoryReplaced = () => renderCaptionPreview();
+      previewCaptionsClient.onSegmentUpserted = () => renderCaptionPreview();
+      previewCaptionsClient.onInterimChanged = () => renderCaptionPreview();
+      previewCaptionsClient.connect();
+    }
+
+    function stopPreview() {
+      if (previewCaptionsClient) {
+        previewCaptionsClient.close();
+        previewCaptionsClient = null;
+      }
+    }
+
+    function copyAudienceLink() {
+      const audienceUrl = `${location.origin}/?room=${encodeURIComponent(selectedRoomId)}&lang=${encodeURIComponent(previewLanguage)}`;
+      navigator.clipboard
+        .writeText(audienceUrl)
+        .then(() => {
+          copyFeedback.style.display = "inline";
+          setTimeout(() => {
+            copyFeedback.style.display = "none";
+          }, 1500);
+        })
+        .catch(() => {});
+    }
+
+    function renderCaptionPreview() {
+      if (!previewCaptionsClient) {
+        return;
+      }
+      captionPreviewSegments.innerHTML = "";
+      const orderedSegments = previewCaptionsClient.orderedSegments().slice(-10);
+      for (const segment of orderedSegments) {
+        if (!segment.original) {
+          continue;
+        }
+        const segmentElement = document.createElement("div");
+        segmentElement.className = "segment";
+        segmentElement.textContent = textForPreviewLanguage(segment);
+        captionPreviewSegments.appendChild(segmentElement);
+      }
+
+      const interimText = previewCaptionsClient.interimText;
+      captionPreviewInterim.textContent = interimText || "";
+    }
+
+    function textForPreviewLanguage(segment) {
+      if (previewLanguage === "original") {
+        return segment.original;
+      }
+      const translatedText = segment.translations ? segment.translations[previewLanguage] : null;
+      return translatedText || segment.original;
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (isLive) {
+        stopCaptureAndCleanup();
+      }
+    });
+
+    initializeBroadcastPage();
+  </script>
+</body>
+</html>
