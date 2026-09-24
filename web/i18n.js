@@ -49,6 +49,10 @@ const translations = {
     "index.decreaseFontSize": "Decrease font size",
     "index.increaseFontSize": "Increase font size",
     "index.jumpToLive": "Jump to live",
+    "index.clearScreen": "🧹 Clear screen",
+    "index.clearScreenHint": "Hide the captions shown so far. Only on this screen: nothing is deleted.",
+    "index.screenCleared": "Screen cleared. The full transcript is still in the downloads.",
+    "index.showAllCaptions": "Show everything again",
     "index.roomStatus": "Room status: {status}",
     "index.interimTranslating": "{text} (original, translating…)",
 
@@ -169,6 +173,10 @@ const translations = {
     "index.decreaseFontSize": "Reducir tamaño de letra",
     "index.increaseFontSize": "Aumentar tamaño de letra",
     "index.jumpToLive": "Ir al en vivo",
+    "index.clearScreen": "🧹 Limpiar pantalla",
+    "index.clearScreenHint": "Oculta los subtítulos mostrados hasta ahora. Solo en esta pantalla: no se borra nada.",
+    "index.screenCleared": "Pantalla limpia. La transcripción completa sigue disponible en las descargas.",
+    "index.showAllCaptions": "Mostrar todo de nuevo",
     "index.roomStatus": "Estado de la sala: {status}",
     "index.interimTranslating": "{text} (original, traduciendo…)",
 

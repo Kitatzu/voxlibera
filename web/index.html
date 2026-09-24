@@ -162,6 +162,27 @@
       margin-top: 0.35rem;
     }
 
+    .cleared-notice {
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      color: var(--color-text-dimmed);
+      font-size: 0.85rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px dashed var(--color-text-dimmed);
+      margin-bottom: 0.5rem;
+    }
+
+    .link-button {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--color-accent);
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: inherit;
+    }
+
     .download-row {
       display: flex;
       gap: 0.5rem;
@@ -214,6 +235,8 @@
       <div class="room-status-line" id="room-status-line"></div>
       <div class="controls-row">
         <a class="change-room-link" href="index.html" data-i18n="index.changeRoom">Change room</a>
+        <button id="clear-screen" type="button" data-i18n="index.clearScreen" data-i18n-title="index.clearScreenHint"
+          title="Hide the captions shown so far. Only on this screen: nothing is deleted.">🧹 Clear screen</button>
         <div class="download-row">
           <button id="download-srt">SRT</button>
           <button id="download-vtt">VTT</button>
@@ -227,6 +250,10 @@
     </header>
 
     <div id="captions-scroll">
+      <div id="cleared-notice" class="cleared-notice" style="display: none">
+        <span data-i18n="index.screenCleared">Screen cleared. The full transcript is still in the downloads.</span>
+        <button id="show-all-captions" type="button" class="link-button" data-i18n="index.showAllCaptions">Show everything again</button>
+      </div>
       <div id="segments-container"></div>
     </div>
 
@@ -272,6 +299,9 @@
     const interimBar = document.getElementById("interim-bar");
     const fontDecreaseButton = document.getElementById("font-decrease");
     const fontIncreaseButton = document.getElementById("font-increase");
+    const clearScreenButton = document.getElementById("clear-screen");
+    const clearedNotice = document.getElementById("cleared-notice");
+    const showAllCaptionsButton = document.getElementById("show-all-captions");
     const downloadSrtButton = document.getElementById("download-srt");
     const downloadVttButton = document.getElementById("download-vtt");
     const downloadTxtButton = document.getElementById("download-txt");
@@ -457,6 +487,7 @@
       roomNameLabel.textContent = `${roomName} — ${languageLabel(languageCode)}`;
 
       applyFontSizePx(readStoredFontSizePx());
+      loadClearedMark();
 
       captionsClient = new CaptionsClient(roomId);
       captionsClient.onConnectionChanged = handleConnectionChanged;
@@ -480,16 +511,87 @@
       roomStatusLine.textContent = t("index.roomStatus", { status: statusLabel(roomStatus) });
     }
 
-    function handleHistoryReplaced(orderedSegments, roomStatus) {
-      segmentsContainer.innerHTML = "";
-      for (const segment of orderedSegments) {
-        segmentsContainer.appendChild(buildSegmentElement(segment));
+    // "Clear screen" hides segments up to this id, only for this viewer. The server keeps everything.
+    let clearedUpToSegmentId = 0;
+    let highestSegmentIdSeen = 0;
+    const allSegmentsById = new Map();
+
+    function clearedStorageKey() {
+      return `voxlibera.clearedUpTo.${currentRoomId}`;
+    }
+
+    function loadClearedMark() {
+      try {
+        clearedUpToSegmentId = parseInt(sessionStorage.getItem(clearedStorageKey()), 10) || 0;
+      } catch (storageError) {
+        clearedUpToSegmentId = 0;
       }
+    }
+
+    function saveClearedMark() {
+      try {
+        sessionStorage.setItem(clearedStorageKey(), String(clearedUpToSegmentId));
+      } catch (storageError) {
+        // Storage unavailable (private mode): clearing still works until reload.
+      }
+    }
+
+    function isCleared(segment) {
+      return segment.id <= clearedUpToSegmentId;
+    }
+
+    function updateClearedNotice() {
+      clearedNotice.style.display = clearedUpToSegmentId > 0 ? "flex" : "none";
+    }
+
+    function clearScreen() {
+      clearedUpToSegmentId = highestSegmentIdSeen;
+      saveClearedMark();
+      segmentsContainer.innerHTML = "";
+      updateClearedNotice();
+    }
+
+    function renderVisibleSegments() {
+      segmentsContainer.innerHTML = "";
+      const orderedSegments = [...allSegmentsById.values()].sort((first, second) => first.id - second.id);
+      for (const segment of orderedSegments) {
+        if (!isCleared(segment)) {
+          segmentsContainer.appendChild(buildSegmentElement(segment));
+        }
+      }
+    }
+
+    function showAllCaptions() {
+      clearedUpToSegmentId = 0;
+      saveClearedMark();
+      renderVisibleSegments();
+      updateClearedNotice();
+      scrollToLiveIfNeeded(true);
+    }
+
+    function handleHistoryReplaced(orderedSegments, roomStatus) {
+      allSegmentsById.clear();
+      for (const segment of orderedSegments) {
+        allSegmentsById.set(segment.id, segment);
+      }
+      highestSegmentIdSeen = orderedSegments.reduce((highest, segment) => Math.max(highest, segment.id), 0);
+      if (highestSegmentIdSeen < clearedUpToSegmentId) {
+        // Production reset the room transcript: ids start over, so the old mark no longer applies.
+        clearedUpToSegmentId = 0;
+        saveClearedMark();
+      }
+      renderVisibleSegments();
+      updateClearedNotice();
       handleStatusChanged(roomStatus);
       scrollToLiveIfNeeded(true);
     }
 
     function handleSegmentUpserted(segment) {
+      allSegmentsById.set(segment.id, segment);
+      highestSegmentIdSeen = Math.max(highestSegmentIdSeen, segment.id);
+      if (isCleared(segment)) {
+        return;  // e.g. a late translation of a sentence the viewer already cleared
+      }
       const existingElement = segmentsContainer.querySelector(
         `[data-segment-id="${segment.id}"]`
       );
@@ -573,6 +675,9 @@
 
     fontDecreaseButton.addEventListener("click", () => adjustFontSize(-2));
     fontIncreaseButton.addEventListener("click", () => adjustFontSize(2));
+
+    clearScreenButton.addEventListener("click", clearScreen);
+    showAllCaptionsButton.addEventListener("click", showAllCaptions);
 
     downloadSrtButton.addEventListener("click", () => {
       location.href = exportUrl(currentRoomId, "srt", currentLanguage);
