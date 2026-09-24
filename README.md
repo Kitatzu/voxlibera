@@ -119,10 +119,19 @@ To go further:
 
 ### Cost
 
-Rough estimate per stage: **≈ US$ 0.55/hour for transcription** (US$ 0.009/min of audio) plus
-translation, which is a few cents per hour with Flash-Lite. The dashboard shows a live estimate per
-stage; prices are configurable in [`config.py`](voxlibera/config.py). Check the current
-[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
+Measured on a 12-minute talk: **US$ 0.16 → about US$ 0.80 per hour per stage**, with three target
+languages (≈ US$ 0.55/h transcription at US$ 0.009/min, the rest translation). The dashboard shows a
+live estimate per stage; prices are configurable in [`config.py`](voxlibera/config.py). Check the
+current [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+### Measured on a real 12-minute talk
+
+| Metric | Value |
+|---|---|
+| Session rotations (GoAway) / errors | 1 / 0, no lost or duplicated words at the handoff |
+| Sentences | 159 |
+| Translation latency | ~1 s |
+| Translated caption delay after the sentence ends | ~0.6 s |
 
 ---
 

@@ -7,3 +7,4 @@ data/
 .env
 *.pcm
 server.log
+source.log
