@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vox Libera — OBS Overlay</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    #overlay-container {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 90vw;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25em;
+    }
+
+    #overlay-container.position-bottom {
+      bottom: 3vh;
+    }
+
+    #overlay-container.position-top {
+      top: 3vh;
+    }
+
+    .overlay-line {
+      color: #ffffff;
+      font-weight: 700;
+      text-align: center;
+      text-shadow:
+        -2px -2px 0 #000,
+        2px -2px 0 #000,
+        -2px 2px 0 #000,
+        2px 2px 0 #000,
+        0 0 8px rgba(0, 0, 0, 0.9);
+      line-height: 1.25;
+      word-wrap: break-word;
+    }
+
+    .overlay-line--interim {
+      opacity: 0.75;
+    }
+
+    #help-text {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      right: 1rem;
+      background: rgba(20, 20, 20, 0.85);
+      color: #ffffff;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #help-text code {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 0.1em 0.3em;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="help-text" style="display: none">
+    <strong>Vox Libera — OBS overlay</strong><br />
+    Add <code>room</code> as a query parameter to use this as a browser source, e.g.
+    <code>obs.html?room=main-stage&amp;lang=es&amp;lines=2&amp;size=42&amp;position=bottom</code
+    ><br />
+    Parameters: <code>room</code> (required), <code>lang</code> (default <code>es</code>),
+    <code>lines</code> (default 2), <code>size</code> (font px, default 42),
+    <code>position</code> (<code>bottom</code> or <code>top</code>, default <code>bottom</code>).
+  </div>
+
+  <div id="overlay-container"></div>
+
+  <script src="common.js"></script>
+  <script>
+    const SILENCE_CLEAR_TIMEOUT_MS = 8000;
+
+    function getQueryParameters() {
+      return new URLSearchParams(location.search);
+    }
+
+    const queryParameters = getQueryParameters();
+    const roomId = queryParameters.get("room");
+    const languageCode = queryParameters.get("lang") || "es";
+    const maximumLineCount = parseInt(queryParameters.get("lines"), 10) || 2;
+    const fontSizePx = parseInt(queryParameters.get("size"), 10) || 42;
+    const overlayPosition = queryParameters.get("position") === "top" ? "top" : "bottom";
+
+    const overlayContainer = document.getElementById("overlay-container");
+    const helpText = document.getElementById("help-text");
+
+    if (!roomId) {
+      helpText.style.display = "block";
+    } else {
+      overlayContainer.classList.add(`position-${overlayPosition}`);
+      overlayContainer.style.fontSize = `${fontSizePx}px`;
+      startOverlay();
+    }
+
+    let committedLines = [];
+    let interimLine = "";
+    let clearTimerId = null;
+
+    function startOverlay() {
+      const captionsClient = new CaptionsClient(roomId);
+      captionsClient.onHistoryReplaced = (orderedSegments) => {
+        committedLines = orderedSegments
+          .map((segment) => textForLanguage(segment))
+          .filter((text) => text !== null)
+          .slice(-maximumLineCount);
+        renderOverlay();
+      };
+      captionsClient.onSegmentUpserted = (segment) => {
+        const text = textForLanguage(segment);
+        if (text !== null) {
+          committedLines.push(text);
+          committedLines = committedLines.slice(-maximumLineCount);
+          renderOverlay();
+          resetSilenceTimer();
+        }
+      };
+      captionsClient.onInterimChanged = (interimText, interimLanguage) => {
+        if (languageCode === "original") {
+          interimLine = interimText || "";
+          renderOverlay();
+          if (interimText) {
+            resetSilenceTimer();
+          }
+        }
+      };
+      captionsClient.connect();
+    }
+
+    function textForLanguage(segment) {
+      if (languageCode === "original") {
+        return segment.original;
+      }
+      const translatedText = segment.translations ? segment.translations[languageCode] : null;
+      return translatedText || segment.original || null;
+    }
+
+    function resetSilenceTimer() {
+      if (clearTimerId) {
+        clearTimeout(clearTimerId);
+      }
+      clearTimerId = setTimeout(() => {
+        committedLines = [];
+        interimLine = "";
+        renderOverlay();
+      }, SILENCE_CLEAR_TIMEOUT_MS);
+    }
+
+    function renderOverlay() {
+      overlayContainer.innerHTML = "";
+
+      for (const lineText of committedLines) {
+        const lineElement = document.createElement("div");
+        lineElement.className = "overlay-line";
+        lineElement.textContent = lineText;
+        overlayContainer.appendChild(lineElement);
+      }
+
+      if (interimLine) {
+        const interimElement = document.createElement("div");
+        interimElement.className = "overlay-line overlay-line--interim";
+        interimElement.textContent = interimLine;
+        overlayContainer.appendChild(interimElement);
+      }
+    }
+  </script>
+</body>
+</html>

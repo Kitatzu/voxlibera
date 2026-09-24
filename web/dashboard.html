@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vox Libera — Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      padding-top: 1rem;
+      padding-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--color-text-dimmed);
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1rem;
+    }
+
+    .room-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .room-card-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .metrics-list {
+      list-style: none;
+      margin: 0.75rem 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem 1rem;
+      font-size: 0.9rem;
+    }
+
+    .metrics-list dt {
+      color: var(--color-text-dimmed);
+      display: inline;
+    }
+
+    .metrics-list dd {
+      display: inline;
+      margin: 0;
+      float: right;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .last-error {
+      color: var(--color-error);
+      font-size: 0.85rem;
+      margin: 0.35rem 0;
+      word-break: break-word;
+    }
+
+    .room-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      align-items: center;
+    }
+
+    .room-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+    }
+
+    .total-cost-row {
+      margin-top: 1rem;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .empty-state {
+      color: var(--color-text-dimmed);
+    }
+  </style>
+</head>
+<body>
+  <h1>Vox Libera — Dashboard</h1>
+  <p class="subtitle">Live monitoring, refreshed every 2 seconds.</p>
+
+  <div id="error-banner" class="banner-error" style="display: none"></div>
+
+  <div id="rooms-grid" class="rooms-grid"></div>
+
+  <div id="total-cost-row" class="total-cost-row"></div>
+
+  <script src="common.js"></script>
+  <script>
+    const POLL_INTERVAL_MS = 2000;
+
+    const errorBanner = document.getElementById("error-banner");
+    const roomsGrid = document.getElementById("rooms-grid");
+    const totalCostRow = document.getElementById("total-cost-row");
+
+    let cachedSamples = [];
+
+    async function loadSamplesOnce() {
+      try {
+        const samplesData = await fetchSamples();
+        cachedSamples = samplesData.samples || [];
+      } catch (fetchError) {
+        cachedSamples = [];
+      }
+    }
+
+    async function pollRooms() {
+      let roomsData;
+      try {
+        roomsData = await fetchRooms();
+      } catch (fetchError) {
+        errorBanner.textContent = "Could not reach the server. Retrying…";
+        errorBanner.style.display = "block";
+        return;
+      }
+      errorBanner.style.display = "none";
+      renderRooms(roomsData.rooms);
+    }
+
+    function renderRooms(rooms) {
+      roomsGrid.innerHTML = "";
+
+      if (rooms.length === 0) {
+        const emptyElement = document.createElement("p");
+        emptyElement.className = "empty-state";
+        emptyElement.textContent = "No rooms configured.";
+        roomsGrid.appendChild(emptyElement);
+        totalCostRow.textContent = "";
+        return;
+      }
+
+      let totalCostUsd = 0;
+      for (const room of rooms) {
+        totalCostUsd += room.estimated_cost_usd || 0;
+        roomsGrid.appendChild(buildRoomCard(room));
+      }
+      totalCostRow.textContent = `Total estimated cost: ${formatCost(totalCostUsd)}`;
+    }
+
+    function buildRoomCard(room) {
+      const cardElement = document.createElement("div");
+      cardElement.className = "card";
+
+      const headerElement = document.createElement("div");
+      headerElement.className = "room-card-header";
+
+      const titleElement = document.createElement("span");
+      titleElement.className = "room-card-title";
+      titleElement.textContent = room.name;
+      headerElement.appendChild(titleElement);
+
+      const statusBadgeElement = document.createElement("span");
+      statusBadgeElement.className = `status-badge status-badge--${room.status}`;
+      statusBadgeElement.textContent = statusLabel(room.status);
+      headerElement.appendChild(statusBadgeElement);
+
+      cardElement.appendChild(headerElement);
+
+      const metricsListElement = document.createElement("dl");
+      metricsListElement.className = "metrics-list";
+      appendMetric(metricsListElement, "Source", room.source_connected ? `Connected (${room.source_kind || "unknown"})` : "Disconnected");
+      appendMetric(metricsListElement, "Audio time", formatDuration(room.audio_seconds));
+      appendMetric(metricsListElement, "Segments", String(room.segments));
+      appendMetric(metricsListElement, "Subscribers", String(room.subscribers));
+      appendMetric(metricsListElement, "Sessions opened", String(room.sessions_opened));
+      appendMetric(metricsListElement, "Rotations", String(room.rotations));
+      appendMetric(metricsListElement, "Errors", String(room.errors));
+      appendMetric(metricsListElement, "Caption lag", `${room.caption_lag_seconds.toFixed(1)}s`);
+      appendMetric(metricsListElement, "Translation latency", `${room.translation_latency_ms}ms`);
+      appendMetric(metricsListElement, "Estimated cost", formatCost(room.estimated_cost_usd));
+      cardElement.appendChild(metricsListElement);
+
+      if (room.last_error) {
+        const lastErrorElement = document.createElement("p");
+        lastErrorElement.className = "last-error";
+        lastErrorElement.textContent = `Last error: ${room.last_error}`;
+        cardElement.appendChild(lastErrorElement);
+      }
+
+      cardElement.appendChild(buildActionsRow(room));
+      cardElement.appendChild(buildLinksRow(room));
+
+      return cardElement;
+    }
+
+    function appendMetric(metricsListElement, label, value) {
+      const rowElement = document.createElement("div");
+      rowElement.className = "metric-row";
+
+      const termElement = document.createElement("dt");
+      termElement.textContent = label;
+
+      const valueElement = document.createElement("dd");
+      valueElement.textContent = value;
+
+      rowElement.appendChild(termElement);
+      rowElement.appendChild(valueElement);
+      metricsListElement.appendChild(rowElement);
+    }
+
+    function buildActionsRow(room) {
+      const actionsElement = document.createElement("div");
+      actionsElement.className = "room-actions";
+
+      const sampleSelectElement = document.createElement("select");
+      for (const sampleFileName of cachedSamples) {
+        const optionElement = document.createElement("option");
+        optionElement.value = sampleFileName;
+        optionElement.textContent = sampleFileName;
+        sampleSelectElement.appendChild(optionElement);
+      }
+      actionsElement.appendChild(sampleSelectElement);
+
+      const simulateButtonElement = document.createElement("button");
+      simulateButtonElement.textContent = "Simulate";
+      simulateButtonElement.addEventListener("click", async () => {
+        simulateButtonElement.disabled = true;
+        try {
+          await simulateRoom(room.id, sampleSelectElement.value);
+          await pollRooms();
+        } catch (simulateError) {
+          errorBanner.textContent = `Failed to start simulation for ${room.name}.`;
+          errorBanner.style.display = "block";
+        } finally {
+          simulateButtonElement.disabled = false;
+        }
+      });
+      actionsElement.appendChild(simulateButtonElement);
+
+      const stopButtonElement = document.createElement("button");
+      stopButtonElement.textContent = "Stop";
+      stopButtonElement.addEventListener("click", async () => {
+        stopButtonElement.disabled = true;
+        try {
+          await stopRoom(room.id);
+          await pollRooms();
+        } catch (stopError) {
+          errorBanner.textContent = `Failed to stop ${room.name}.`;
+          errorBanner.style.display = "block";
+        } finally {
+          stopButtonElement.disabled = false;
+        }
+      });
+      actionsElement.appendChild(stopButtonElement);
+
+      return actionsElement;
+    }
+
+    function buildLinksRow(room) {
+      const linksElement = document.createElement("div");
+      linksElement.className = "room-links";
+
+      linksElement.appendChild(
+        buildLink(`Open captions`, `index.html?room=${encodeURIComponent(room.id)}&lang=original`)
+      );
+      linksElement.appendChild(
+        buildLink(`OBS overlay`, `obs.html?room=${encodeURIComponent(room.id)}&lang=es`)
+      );
+      linksElement.appendChild(buildLink(`Export SRT`, exportUrl(room.id, "srt", "original")));
+      linksElement.appendChild(buildLink(`Export VTT`, exportUrl(room.id, "vtt", "original")));
+      linksElement.appendChild(buildLink(`Export TXT`, exportUrl(room.id, "txt", "original")));
+
+      return linksElement;
+    }
+
+    function buildLink(labelText, href) {
+      const linkElement = document.createElement("a");
+      linkElement.href = href;
+      linkElement.textContent = labelText;
+      if (href.startsWith("index.html") || href.startsWith("obs.html")) {
+        linkElement.target = "_blank";
+      }
+      return linkElement;
+    }
+
+    async function initializeDashboard() {
+      await loadSamplesOnce();
+      await pollRooms();
+      setInterval(pollRooms, POLL_INTERVAL_MS);
+    }
+
+    initializeDashboard();
+  </script>
+</body>
+</html>

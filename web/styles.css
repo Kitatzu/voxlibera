@@ -1,0 +1,153 @@
+/* Vox Libera — shared styles. Dark theme default, light via prefers-color-scheme. */
+
+:root {
+  --color-background: #0e1116;
+  --color-surface: #171b22;
+  --color-surface-raised: #1f2530;
+  --color-border: #2b323e;
+  --color-text: #eef1f6;
+  --color-text-dimmed: #8a93a3;
+  --color-accent: #5aa9ff;
+  --color-accent-text: #05131f;
+  --color-success: #3ecf8e;
+  --color-warning: #f0b429;
+  --color-error: #f2545b;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --side-gutter: 16px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-background: #f4f6f9;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ffffff;
+    --color-border: #d7dce4;
+    --color-text: #14181f;
+    --color-text-dimmed: #626c7c;
+    --color-accent: #1768c9;
+    --color-accent-text: #ffffff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  padding-left: var(--side-gutter);
+  padding-right: var(--side-gutter);
+}
+
+a {
+  color: var(--color-accent);
+}
+
+button,
+select {
+  font-family: inherit;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--color-accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge--idle {
+  background: #3a4150;
+  color: #d8dee8;
+}
+
+.status-badge--starting {
+  background: #4a3f14;
+  color: var(--color-warning);
+}
+
+.status-badge--live {
+  background: #123a2b;
+  color: var(--color-success);
+}
+
+.status-badge--rotating {
+  background: #123a2b;
+  color: var(--color-success);
+}
+
+.status-badge--error {
+  background: #43181a;
+  color: var(--color-error);
+}
+
+.status-badge--stopped {
+  background: #3a4150;
+  color: #d8dee8;
+}
+
+.banner-error {
+  background: #43181a;
+  color: #ffd7d7;
+  border: 1px solid var(--color-error);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.dimmed {
+  color: var(--color-text-dimmed);
+}
+
+.italic {
+  font-style: italic;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
