@@ -1,0 +1,191 @@
+"""FastAPI app: REST + WebSocket API and the static web frontend."""
+
+import argparse
+import asyncio
+import contextlib
+import logging
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
+from google import genai
+from pydantic import BaseModel
+
+from voxlibera.broadcaster import Broadcaster
+from voxlibera.config import Settings, load_rooms
+from voxlibera.exporters import EXPORTERS, MEDIA_TYPES
+from voxlibera.room import Room
+
+logger = logging.getLogger("voxlibera")
+
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".m4a", ".flac", ".webm", ".pcm"}
+CLOSE_ROOM_NOT_FOUND = 4404
+CLOSE_UNAUTHORIZED = 4401
+CLOSE_SOURCE_BUSY = 4409
+
+
+class SimulateRequest(BaseModel):
+    sample: str
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings.from_environment()
+    broadcaster = Broadcaster()
+    rooms: dict[str, Room] = {}
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        client = genai.Client()  # reads GEMINI_API_KEY
+        for room_config in load_rooms(settings.rooms_file):
+            rooms[room_config.id] = Room(room_config, settings, client, broadcaster)
+        logger.info("Serving rooms: %s", ", ".join(rooms))
+        yield
+        await asyncio.gather(*(room.stop_source() for room in rooms.values()), return_exceptions=True)
+
+    app = FastAPI(title="Vox Libera", lifespan=lifespan)
+
+    def get_room(room_id: str) -> Room:
+        room = rooms.get(room_id)
+        if room is None:
+            raise HTTPException(status_code=404, detail=f"Unknown room '{room_id}'")
+        return room
+
+    @app.get("/healthz")
+    async def health() -> dict:
+        return {"ok": True}
+
+    @app.get("/api/rooms")
+    async def list_rooms() -> dict:
+        return {
+            "languages": ["original", *settings.target_languages],
+            "rooms": [room.snapshot() for room in rooms.values()],
+        }
+
+    @app.get("/api/samples")
+    async def list_samples() -> dict:
+        samples = []
+        if settings.samples_dir.exists():
+            samples = sorted(
+                path.name for path in settings.samples_dir.iterdir()
+                if path.suffix.lower() in AUDIO_EXTENSIONS
+            )
+        return {"samples": samples}
+
+    @app.post("/api/rooms/{room_id}/simulate")
+    async def simulate(room_id: str, request: SimulateRequest) -> dict:
+        room = get_room(room_id)
+        sample_path = (settings.samples_dir / request.sample).resolve()
+        if sample_path.parent != settings.samples_dir.resolve() or not sample_path.is_file():
+            raise HTTPException(status_code=404, detail="Unknown sample")
+        try:
+            started = await room.start_simulation(sample_path)
+        except Exception as error:
+            raise HTTPException(status_code=502, detail=f"Could not start: {error}") from error
+        if not started:
+            raise HTTPException(status_code=409, detail="Room already has an audio source")
+        return {"ok": True}
+
+    @app.post("/api/rooms/{room_id}/stop")
+    async def stop(room_id: str) -> dict:
+        await get_room(room_id).stop_source()
+        return {"ok": True}
+
+    @app.post("/api/rooms/{room_id}/reset")
+    async def reset(room_id: str) -> dict:
+        room = get_room(room_id)
+        if room.has_source:
+            raise HTTPException(status_code=409, detail="Stop the audio source before resetting")
+        room.reset_transcript()
+        return {"ok": True}
+
+    @app.get("/api/rooms/{room_id}/export")
+    async def export(room_id: str, format: str = Query("srt"), lang: str = Query("original")) -> Response:
+        room = get_room(room_id)
+        if format not in EXPORTERS:
+            raise HTTPException(status_code=400, detail=f"format must be one of {sorted(EXPORTERS)}")
+        if lang != "original" and lang not in settings.target_languages:
+            raise HTTPException(status_code=400, detail="Unknown language")
+        filename = f"{room_id}-{lang}.{format}"
+        return Response(
+            content=room.export(format, lang),
+            media_type=f"{MEDIA_TYPES[format]}; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.websocket("/ws/rooms/{room_id}")
+    async def audience(websocket: WebSocket, room_id: str) -> None:
+        room = rooms.get(room_id)
+        await websocket.accept()
+        if room is None:
+            await websocket.close(code=CLOSE_ROOM_NOT_FOUND, reason="Unknown room")
+            return
+        subscription = broadcaster.subscribe(room_id)
+
+        async def forward_events() -> None:
+            await websocket.send_json({"type": "history", "segments": room.history(), "status": room.status})
+            while (message := await subscription.next_message()) is not None:
+                await websocket.send_json(message)
+
+        async def wait_for_disconnect() -> None:
+            while True:
+                await websocket.receive_text()  # raises once the viewer leaves
+
+        tasks = [asyncio.create_task(forward_events()), asyncio.create_task(wait_for_disconnect())]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            broadcaster.unsubscribe(room_id, subscription)
+            with contextlib.suppress(Exception):
+                await websocket.close()
+
+    @app.websocket("/ws/ingest/{room_id}")
+    async def ingest(websocket: WebSocket, room_id: str, token: str | None = None) -> None:
+        room = rooms.get(room_id)
+        await websocket.accept()
+        if room is None:
+            await websocket.close(code=CLOSE_ROOM_NOT_FOUND, reason="Unknown room")
+            return
+        if settings.ingest_token and token != settings.ingest_token:
+            await websocket.close(code=CLOSE_UNAUTHORIZED, reason="Invalid token")
+            return
+        try:
+            started = await room.start_source("websocket")
+        except Exception as error:
+            await websocket.close(code=1011, reason=f"Could not start transcription: {error}"[:120])
+            return
+        if not started:
+            await websocket.close(code=CLOSE_SOURCE_BUSY, reason="Room already has an audio source")
+            return
+        try:
+            while True:
+                chunk = await websocket.receive_bytes()
+                room.feed_audio(chunk)
+        except (WebSocketDisconnect, RuntimeError, KeyError):
+            pass
+        finally:
+            if room.source_kind == "websocket":
+                await room.stop_source()
+
+    if settings.web_dir.exists():
+        app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
+    return app
+
+
+def main() -> None:
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Run the Vox Libera server")
+    parser.add_argument("--host", default=os.environ.get("VOXLIBERA_HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("VOXLIBERA_PORT", "8000")))
+    arguments = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    uvicorn.run(create_app(), host=arguments.host, port=arguments.port)
+
+
+if __name__ == "__main__":
+    main()

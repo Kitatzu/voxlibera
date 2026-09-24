@@ -1,0 +1,37 @@
+# Rooms (stages) served by this Vox Libera instance.
+# Each room gets its own Gemini Live session while a source is connected.
+#
+# glossary: technical terms and proper names. They are used twice:
+#   1. as custom vocabulary for speech recognition (spelling of names, jargon)
+#   2. in the translation prompt, where they are kept untranslated
+# Keep it short (< 100 terms per room works best). The top-level glossary is shared.
+
+glossary:
+  - Nerdearla
+  - Kubernetes
+  - Pod
+  - deploy
+  - cluster
+  - API
+  - URIs
+  - NoSQL
+  - open source
+  - DevOps
+  - LLM
+  - Gemini
+
+rooms:
+  - id: main-stage
+    name: Main Stage
+    description: Keynotes and main track talks
+    glossary: [Ilya Repin, Kuokkala, Metropolitan Museum of Art, ERwin, ER/Studio, Mongo]
+
+  - id: stage-b
+    name: Stage B
+    description: Community and careers track
+    glossary: [100Devs, networking, influencers]
+
+  - id: stage-c
+    name: Stage C
+    description: Workshops
+    glossary: []
