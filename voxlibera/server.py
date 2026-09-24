@@ -38,6 +38,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Get a key at https://aistudio.google.com/apikey and "
+                "put GEMINI_API_KEY=your-key in a .env file in the project folder."
+            )
         client = genai.Client()  # reads GEMINI_API_KEY
         for room_config in load_rooms(settings.rooms_file):
             rooms[room_config.id] = Room(room_config, settings, client, broadcaster)
@@ -189,9 +194,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+def load_dotenv(path: str = ".env") -> None:
+    """Minimal .env support (KEY=VALUE lines); real environment variables win."""
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def main() -> None:
     import uvicorn
 
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Run the Vox Libera server")
     parser.add_argument("--host", default=os.environ.get("VOXLIBERA_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("VOXLIBERA_PORT", "8000")))

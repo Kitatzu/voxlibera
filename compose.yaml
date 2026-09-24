@@ -2,9 +2,9 @@ services:
   voxlibera:
     build: .
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}  # put it in a .env file next to this one
       VOXLIBERA_ADMIN_KEY: ${VOXLIBERA_ADMIN_KEY:-}
     volumes:
       - voxlibera-data:/data

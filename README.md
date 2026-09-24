@@ -26,7 +26,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install -e .
 
-export GEMINI_API_KEY="your-key"     # Windows PowerShell: $env:GEMINI_API_KEY = "your-key"
+echo GEMINI_API_KEY=your-key > .env   # git-ignored; environment variables work too
 voxlibera-server
 ```
 
@@ -43,7 +43,8 @@ That's it: two stages transcribing and translating in parallel from the included
 ### Or with Docker
 
 ```bash
-GEMINI_API_KEY="your-key" docker compose up
+echo GEMINI_API_KEY=your-key > .env
+docker compose up --build        # PORT=8080 docker compose up to use another port
 ```
 
 ---
