@@ -1,5 +1,6 @@
 """Transcript exporters: SRT, WebVTT and plain text."""
 
+import math
 from collections.abc import Iterable
 
 from voxlibera.models import Segment
@@ -24,10 +25,17 @@ def _format_timestamp(seconds: float, decimal_separator: str) -> str:
 def _caption_chunks(text: str, start: float, end: float) -> list[tuple[str, float, float]]:
     """Split long sentences into readable captions, spreading time by length."""
     words = text.split()
+    # Balanced split: "long first line + 'with it.'" reads worse than two similar halves.
+    chunk_count = max(1, math.ceil(len(text) / MAX_CAPTION_CHARACTERS))
+    target_length = len(text) / chunk_count
     chunks: list[str] = []
     current: list[str] = []
     for word in words:
-        if current and len(" ".join([*current, word])) > MAX_CAPTION_CHARACTERS:
+        candidate_length = len(" ".join([*current, word]))
+        remaining_chunks = chunk_count - len(chunks)
+        if current and remaining_chunks > 1 and (
+            candidate_length > MAX_CAPTION_CHARACTERS or candidate_length > target_length + len(word) / 2
+        ):
             chunks.append(" ".join(current))
             current = []
         current.append(word)

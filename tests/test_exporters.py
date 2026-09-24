@@ -26,5 +26,14 @@ def test_long_sentences_are_split_into_readable_captions():
     assert all(len(block.splitlines()[2]) <= 84 for block in captions)
 
 
+def test_split_is_balanced():
+    text = ("You're going to want to define that up front to the best of your abilities "
+            "and stick with it.")
+    segment = Segment(id=1, start=0, end=4, original=text)
+    lines = [block.splitlines()[2] for block in to_srt([segment], "original").split("\n\n") if block.strip()]
+    assert len(lines) == 2
+    assert min(len(line) for line in lines) > 30
+
+
 def test_plain_text():
     assert to_text(SEGMENTS, "original") == "First sentence.\nSecond sentence.\n"
