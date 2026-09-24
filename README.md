@@ -1,5 +1,7 @@
 # Vox Libera
 
+**English** · [Español](README.es.md)
+
 **Open source live captions and translation for multi-stage conferences.**
 Plug in the audio of every stage and the audience gets real-time subtitles in the original
 language plus Spanish, English and Portuguese, on their phone or burned into the stream.
@@ -37,11 +39,13 @@ Then open:
 
 | URL | What |
 |---|---|
-| http://localhost:8000/dashboard.html | Production dashboard. Press **Simulate** on two stages to play the bundled sample talks. |
+| http://localhost:8000/dashboard.html | Production dashboard. Press **▶ Play sample** on two stages to play the bundled sample talks. |
 | http://localhost:8000/ | Audience view: choose stage + language. |
+| http://localhost:8000/broadcast.html | Send audio from the browser: microphone, a tab (e.g. a YouTube talk) or a file. |
 | http://localhost:8000/obs.html?room=main-stage&lang=es | Overlay for OBS (add as *Browser Source*). |
 
 That's it: two stages transcribing and translating in parallel from the included samples.
+The UI is available in English and Spanish (EN | ES switch in the top bar).
 
 ### Or with Docker
 
@@ -55,6 +59,11 @@ docker compose up --build        # PORT=8080 docker compose up to use another po
 ## Feeding real audio
 
 Each stage (room) accepts **one audio source**. Rooms are defined in [`rooms.yaml`](rooms.yaml).
+
+**Easiest: the browser.** Open `/broadcast.html` on the stage laptop, pick the stage, press
+🎙 **Microphone** (or 🖥 **Tab audio**, 📁 **File**) and **Start broadcasting**. Captions show up on the same screen.
+
+**For unattended setups, the CLI** (anything ffmpeg can read):
 
 | Source | Command |
 |---|---|
@@ -113,7 +122,7 @@ We measured the Live API with real Nerdearla talks before writing the pipeline.
 | Concurrent Live sessions per API key | 20 tested without errors | Rotation briefly uses 2 sessions per stage. |
 | Transcription tokens per minute | 100K TPM (tier 1) | ~2K tokens/min per stream → **~25 stages per key**. |
 | Translation requests per day | 150K RPD | ~8–10 sentences/min per stage → 10 stages × 8 h ≈ 48K requests. |
-| Translation latency | ~1.5 s | Viewers see the translated sentence ~2.5 s after it is spoken. |
+| Translation latency | ~1 s | Measured: the translated caption appears ~0.6 s after the sentence ends. |
 
 To go further:
 
@@ -198,7 +207,7 @@ pytest
 | [`voxlibera/room.py`](voxlibera/room.py) | Per-stage pipeline, metrics, persistence. |
 | [`voxlibera/server.py`](voxlibera/server.py) | FastAPI REST + WebSocket API, static frontend. |
 | [`voxlibera/source.py`](voxlibera/source.py) | Audio source CLI (file, mic, stream, YouTube). |
-| [`web/`](web/) | Audience view, OBS overlay, dashboard. Plain HTML/JS, no build step, works offline. |
+| [`web/`](web/) | Audience view, broadcast page, OBS overlay, dashboard. Plain HTML/JS, no build step, works offline. UI strings in [`web/i18n.js`](web/i18n.js). |
 
 ## Known limitations
 
