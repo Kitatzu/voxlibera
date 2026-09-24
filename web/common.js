@@ -121,7 +121,7 @@ function setAdminKey(adminKey) {
 }
 
 function promptForAdminKey(promptMessage) {
-  const enteredKey = window.prompt(promptMessage || "Enter the admin key");
+  const enteredKey = window.prompt(promptMessage || t("common.enterAdminKey"));
   const trimmedKey = (enteredKey || "").trim();
   setAdminKey(trimmedKey);
   return trimmedKey;
@@ -142,7 +142,7 @@ async function adminFetch(url, options) {
 
   let response = await fetch(url, requestOptions);
   if (response.status === 401) {
-    const enteredKey = promptForAdminKey("This action needs the admin key. Enter it:");
+    const enteredKey = promptForAdminKey(t("common.adminKeyNeeded"));
     if (enteredKey) {
       headers.set("X-Admin-Key", enteredKey);
       requestOptions.headers = headers;
@@ -160,7 +160,7 @@ function setupAdminKeyButton(buttonElement) {
   buttonElement.addEventListener("click", () => {
     const currentAdminKey = getAdminKey();
     const enteredKey = window.prompt(
-      "Admin key (leave blank to clear):",
+      t("common.adminKeyPromptLabel"),
       currentAdminKey
     );
     if (enteredKey === null) {
@@ -196,9 +196,9 @@ function renderTopNavigation(activePage) {
   navigationElement.className = "top-nav-links";
 
   const pages = [
-    { key: "captions", label: "Captions", href: "/" },
-    { key: "broadcast", label: "Broadcast", href: "/broadcast.html" },
-    { key: "dashboard", label: "Dashboard", href: "/dashboard.html" },
+    { key: "captions", labelKey: "nav.captions", href: "/" },
+    { key: "broadcast", labelKey: "nav.broadcast", href: "/broadcast.html" },
+    { key: "dashboard", labelKey: "nav.dashboard", href: "/dashboard.html" },
   ];
 
   for (const page of pages) {
@@ -209,15 +209,63 @@ function renderTopNavigation(activePage) {
       linkElement.setAttribute("aria-current", "page");
     }
     linkElement.href = page.href;
-    linkElement.textContent = page.label;
+    linkElement.textContent = t(page.labelKey);
     navigationElement.appendChild(linkElement);
   }
 
   innerElement.appendChild(navigationElement);
+  innerElement.appendChild(buildLanguageToggle(activePage));
   headerElement.appendChild(innerElement);
 
   container.innerHTML = "";
   container.appendChild(headerElement);
+}
+
+/**
+ * Compact EN | ES toggle rendered in the shared top navigation. Switching
+ * language re-renders the navigation itself, re-applies data-i18n
+ * translations across the document, and calls the page's own
+ * window.onUiLanguageChanged() hook (if defined) so dynamically built
+ * content — room cards, buttons, status text — refreshes immediately
+ * without a page reload.
+ */
+function buildLanguageToggle(activePage) {
+  const toggleElement = document.createElement("div");
+  toggleElement.className = "top-nav-language-toggle";
+
+  const currentUiLanguage = getUiLanguage();
+  const languageOptions = [
+    { code: "en", label: "EN", name: "English" },
+    { code: "es", label: "ES", name: "Español" },
+  ];
+
+  for (const languageOption of languageOptions) {
+    const languageButtonElement = document.createElement("button");
+    languageButtonElement.type = "button";
+    languageButtonElement.className = "top-nav-language-button";
+    if (languageOption.code === currentUiLanguage) {
+      languageButtonElement.classList.add("top-nav-language-button--active");
+    }
+    languageButtonElement.textContent = languageOption.label;
+    languageButtonElement.setAttribute(
+      "aria-label",
+      t("nav.switchLanguage", { language: languageOption.name })
+    );
+    languageButtonElement.addEventListener("click", () => {
+      if (languageOption.code === getUiLanguage()) {
+        return;
+      }
+      setUiLanguage(languageOption.code);
+      renderTopNavigation(activePage);
+      applyTranslations(document);
+      if (typeof window.onUiLanguageChanged === "function") {
+        window.onUiLanguageChanged();
+      }
+    });
+    toggleElement.appendChild(languageButtonElement);
+  }
+
+  return toggleElement;
 }
 
 /**
@@ -344,15 +392,8 @@ class CaptionsClient {
   }
 }
 
-const STATUS_LABELS = {
-  idle: "Idle",
-  starting: "Starting",
-  live: "Live",
-  rotating: "Rotating",
-  error: "Error",
-  stopped: "Stopped",
-};
-
 function statusLabel(statusCode) {
-  return STATUS_LABELS[statusCode] || statusCode;
+  const statusKey = `status.${statusCode}`;
+  const translatedLabel = t(statusKey);
+  return translatedLabel === statusKey ? statusCode : translatedLabel;
 }

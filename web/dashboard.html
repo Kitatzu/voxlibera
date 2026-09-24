@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vox Libera — Dashboard</title>
+  <title data-i18n="dashboard.title">Vox Libera — Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
     body {
@@ -149,10 +149,10 @@
 
   <div class="page-header-row">
     <div>
-      <h1>Dashboard</h1>
-      <p class="subtitle">Live monitoring, refreshed every 2 seconds.</p>
+      <h1 data-i18n="dashboard.heading">Dashboard</h1>
+      <p class="subtitle" data-i18n="dashboard.subtitle">Live monitoring, refreshed every 2 seconds.</p>
     </div>
-    <button id="admin-key-button" type="button">🔑 Admin key</button>
+    <button id="admin-key-button" type="button" data-i18n="common.adminKeyButton">🔑 Admin key</button>
   </div>
 
   <div id="error-banner" class="banner-error" style="display: none"></div>
@@ -161,6 +161,7 @@
 
   <div id="total-cost-row" class="total-cost-row"></div>
 
+  <script src="i18n.js"></script>
   <script src="common.js"></script>
   <script>
     const POLL_INTERVAL_MS = 2000;
@@ -176,6 +177,8 @@
     const downloadFormatByRoomId = new Map();
     const downloadLanguageByRoomId = new Map();
     const cardErrorByRoomId = new Map();
+    let lastRoomsData = null;
+    let errorBannerVisible = false;
 
     async function loadSamplesOnce() {
       try {
@@ -191,11 +194,14 @@
       try {
         roomsData = await fetchRooms();
       } catch (fetchError) {
-        errorBanner.textContent = "Could not reach the server. Retrying…";
+        errorBannerVisible = true;
+        errorBanner.textContent = t("dashboard.couldNotReachServerRetrying");
         errorBanner.style.display = "block";
         return;
       }
+      errorBannerVisible = false;
       errorBanner.style.display = "none";
+      lastRoomsData = roomsData;
       renderRooms(roomsData.rooms, roomsData.languages || ["original"]);
     }
 
@@ -205,7 +211,7 @@
       if (rooms.length === 0) {
         const emptyElement = document.createElement("p");
         emptyElement.className = "empty-state";
-        emptyElement.textContent = "No rooms configured.";
+        emptyElement.textContent = t("dashboard.noRoomsConfigured");
         roomsGrid.appendChild(emptyElement);
         totalCostRow.textContent = "";
         return;
@@ -216,7 +222,7 @@
         totalCostUsd += room.estimated_cost_usd || 0;
         roomsGrid.appendChild(buildRoomCard(room, languages));
       }
-      totalCostRow.textContent = `Total estimated cost: ${formatCost(totalCostUsd)}`;
+      totalCostRow.textContent = t("dashboard.totalEstimatedCost", { cost: formatCost(totalCostUsd) });
     }
 
     function buildRoomCard(room, languages) {
@@ -240,22 +246,28 @@
 
       const metricsListElement = document.createElement("dl");
       metricsListElement.className = "metrics-list";
-      appendMetric(metricsListElement, "Source", room.source_connected ? `Connected (${room.source_kind || "unknown"})` : "Disconnected");
-      appendMetric(metricsListElement, "Audio time", formatDuration(room.audio_seconds));
-      appendMetric(metricsListElement, "Segments", String(room.segments));
-      appendMetric(metricsListElement, "Subscribers", String(room.subscribers));
-      appendMetric(metricsListElement, "Sessions opened", String(room.sessions_opened));
-      appendMetric(metricsListElement, "Rotations", String(room.rotations));
-      appendMetric(metricsListElement, "Errors", String(room.errors));
-      appendMetric(metricsListElement, "Caption lag", `${room.caption_lag_seconds.toFixed(1)}s`);
-      appendMetric(metricsListElement, "Translation latency", `${room.translation_latency_ms}ms`);
-      appendMetric(metricsListElement, "Estimated cost", formatCost(room.estimated_cost_usd));
+      appendMetric(
+        metricsListElement,
+        t("dashboard.source"),
+        room.source_connected
+          ? t("dashboard.connectedKind", { kind: room.source_kind || t("dashboard.unknownKind") })
+          : t("dashboard.disconnected")
+      );
+      appendMetric(metricsListElement, t("dashboard.audioTime"), formatDuration(room.audio_seconds));
+      appendMetric(metricsListElement, t("dashboard.segments"), String(room.segments));
+      appendMetric(metricsListElement, t("dashboard.subscribers"), String(room.subscribers));
+      appendMetric(metricsListElement, t("dashboard.sessionsOpened"), String(room.sessions_opened));
+      appendMetric(metricsListElement, t("dashboard.rotations"), String(room.rotations));
+      appendMetric(metricsListElement, t("dashboard.errors"), String(room.errors));
+      appendMetric(metricsListElement, t("dashboard.captionLag"), `${room.caption_lag_seconds.toFixed(1)}s`);
+      appendMetric(metricsListElement, t("dashboard.translationLatency"), `${room.translation_latency_ms}ms`);
+      appendMetric(metricsListElement, t("dashboard.estimatedCost"), formatCost(room.estimated_cost_usd));
       cardElement.appendChild(metricsListElement);
 
       if (room.last_error) {
         const lastErrorElement = document.createElement("p");
         lastErrorElement.className = "last-error";
-        lastErrorElement.textContent = `Last error: ${room.last_error}`;
+        lastErrorElement.textContent = t("dashboard.lastError", { error: room.last_error });
         cardElement.appendChild(lastErrorElement);
       }
 
@@ -313,7 +325,7 @@
 
       const simulateButtonElement = document.createElement("button");
       simulateButtonElement.className = "action-button";
-      simulateButtonElement.textContent = "▶ Play sample";
+      simulateButtonElement.textContent = t("dashboard.playSample");
       simulateButtonElement.addEventListener("click", async () => {
         simulateButtonElement.disabled = true;
         setCardError(room.id, null);
@@ -321,7 +333,7 @@
           await simulateRoom(room.id, sampleSelectElement.value);
           await pollRooms();
         } catch (simulateError) {
-          setCardError(room.id, `Failed to start simulation: ${simulateError.message}`);
+          setCardError(room.id, t("dashboard.failedToStartSimulation", { message: simulateError.message }));
           await pollRooms();
         } finally {
           simulateButtonElement.disabled = false;
@@ -339,12 +351,12 @@
       const broadcastLinkElement = document.createElement("a");
       broadcastLinkElement.className = "action-button";
       broadcastLinkElement.href = `broadcast.html?room=${encodeURIComponent(room.id)}`;
-      broadcastLinkElement.textContent = "🎙 Broadcast";
+      broadcastLinkElement.textContent = t("dashboard.broadcast");
       actionsElement.appendChild(broadcastLinkElement);
 
       const stopButtonElement = document.createElement("button");
       stopButtonElement.className = "action-button";
-      stopButtonElement.textContent = "■ Stop";
+      stopButtonElement.textContent = t("dashboard.stop");
       stopButtonElement.disabled = !room.source_connected;
       stopButtonElement.addEventListener("click", async () => {
         stopButtonElement.disabled = true;
@@ -353,7 +365,7 @@
           await stopRoom(room.id);
           await pollRooms();
         } catch (stopError) {
-          setCardError(room.id, `Failed to stop: ${stopError.message}`);
+          setCardError(room.id, t("dashboard.failedToStop", { message: stopError.message }));
           await pollRooms();
         }
       });
@@ -361,10 +373,10 @@
 
       const clearButtonElement = document.createElement("button");
       clearButtonElement.className = "action-button";
-      clearButtonElement.textContent = "🗑 Clear transcript";
+      clearButtonElement.textContent = t("dashboard.clearTranscript");
       clearButtonElement.disabled = room.source_connected;
       clearButtonElement.addEventListener("click", async () => {
-        const confirmed = window.confirm("Delete this room's transcript?");
+        const confirmed = window.confirm(t("dashboard.confirmDeleteTranscript"));
         if (!confirmed) {
           return;
         }
@@ -374,7 +386,7 @@
           await resetRoom(room.id);
           await pollRooms();
         } catch (resetError) {
-          setCardError(room.id, `Failed to clear transcript: ${resetError.message}`);
+          setCardError(room.id, t("dashboard.failedToClearTranscript", { message: resetError.message }));
           await pollRooms();
         }
       });
@@ -391,30 +403,30 @@
       openCaptionsLink.className = "action-button";
       openCaptionsLink.href = `index.html?room=${encodeURIComponent(room.id)}&lang=original`;
       openCaptionsLink.target = "_blank";
-      openCaptionsLink.textContent = "👁 Open captions";
+      openCaptionsLink.textContent = t("dashboard.openCaptions");
       linksElement.appendChild(openCaptionsLink);
 
       linksElement.appendChild(
-        buildCopyButton("📋 Copy audience link", `${location.origin}/index.html?room=${encodeURIComponent(room.id)}&lang=original`)
+        buildCopyButton("dashboard.copyAudienceLink", `${location.origin}/index.html?room=${encodeURIComponent(room.id)}&lang=original`)
       );
       linksElement.appendChild(
-        buildCopyButton("📋 Copy OBS link", `${location.origin}/obs.html?room=${encodeURIComponent(room.id)}&lang=es`)
+        buildCopyButton("dashboard.copyObsLink", `${location.origin}/obs.html?room=${encodeURIComponent(room.id)}&lang=es`)
       );
 
       return linksElement;
     }
 
-    function buildCopyButton(labelText, urlToCopy) {
+    function buildCopyButton(labelKey, urlToCopy) {
       const wrapperElement = document.createElement("span");
 
       const buttonElement = document.createElement("button");
       buttonElement.className = "action-button";
-      buttonElement.textContent = labelText;
+      buttonElement.textContent = t(labelKey);
       wrapperElement.appendChild(buttonElement);
 
       const feedbackElement = document.createElement("span");
       feedbackElement.className = "copy-feedback";
-      feedbackElement.textContent = "Copied!";
+      feedbackElement.textContent = t("common.copied");
       feedbackElement.style.display = "none";
       wrapperElement.appendChild(feedbackElement);
 
@@ -450,17 +462,17 @@
       });
       rowElement.appendChild(languageSelectElement);
 
-      rowElement.appendChild(buildDownloadButton("⬇ SRT", room, "srt", languageSelectElement));
-      rowElement.appendChild(buildDownloadButton("⬇ VTT", room, "vtt", languageSelectElement));
-      rowElement.appendChild(buildDownloadButton("⬇ TXT", room, "txt", languageSelectElement));
+      rowElement.appendChild(buildDownloadButton("dashboard.downloadSrt", room, "srt", languageSelectElement));
+      rowElement.appendChild(buildDownloadButton("dashboard.downloadVtt", room, "vtt", languageSelectElement));
+      rowElement.appendChild(buildDownloadButton("dashboard.downloadTxt", room, "txt", languageSelectElement));
 
       return rowElement;
     }
 
-    function buildDownloadButton(labelText, room, format, languageSelectElement) {
+    function buildDownloadButton(labelKey, room, format, languageSelectElement) {
       const buttonElement = document.createElement("button");
       buttonElement.className = "action-button";
-      buttonElement.textContent = labelText;
+      buttonElement.textContent = t(labelKey);
       buttonElement.addEventListener("click", () => {
         window.location.href = exportUrl(room.id, format, languageSelectElement.value);
       });
@@ -472,6 +484,15 @@
       await pollRooms();
       setInterval(pollRooms, POLL_INTERVAL_MS);
     }
+
+    window.onUiLanguageChanged = () => {
+      if (errorBannerVisible) {
+        errorBanner.textContent = t("dashboard.couldNotReachServerRetrying");
+      }
+      if (lastRoomsData) {
+        renderRooms(lastRoomsData.rooms, lastRoomsData.languages || ["original"]);
+      }
+    };
 
     initializeDashboard();
   </script>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vox Libera — Live Captions</title>
+  <title data-i18n="index.title">Vox Libera — Live Captions</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
     body {
@@ -184,44 +184,44 @@
 
   <div id="picker-view">
     <h1>Vox Libera</h1>
-    <p class="dimmed">Pick a room and a language to see live captions.</p>
+    <p class="dimmed" data-i18n="index.pickRoomAndLanguage">Pick a room and a language to see live captions.</p>
     <div id="picker-error" class="banner-error" style="display: none"></div>
 
     <div class="picker-field" id="room-select-field">
-      <label for="room-select">Room</label>
+      <label for="room-select" data-i18n="index.roomLabel">Room</label>
       <select id="room-select"></select>
     </div>
     <div class="choice-grid" id="room-choice-grid" hidden></div>
 
     <div class="picker-field" id="language-select-field">
-      <label for="language-select">Language</label>
+      <label for="language-select" data-i18n="index.languageLabel">Language</label>
       <select id="language-select"></select>
     </div>
     <div class="choice-grid" id="language-choice-grid" hidden></div>
 
-    <button id="join-button" class="primary">Join</button>
+    <button id="join-button" class="primary" data-i18n="index.join">Join</button>
   </div>
 
   <div id="captions-view">
     <header>
       <div class="header-row">
-        <p class="header-title" id="room-name-label">Room</p>
+        <p class="header-title" id="room-name-label" data-i18n="index.roomNameDefault">Room</p>
         <div class="connection-indicator">
           <span class="connection-dot" id="connection-dot"></span>
-          <span id="connection-label">Connecting…</span>
+          <span id="connection-label" data-i18n="connection.connecting">Connecting…</span>
         </div>
       </div>
       <div class="room-status-line" id="room-status-line"></div>
       <div class="controls-row">
-        <a class="change-room-link" href="index.html">Change room</a>
+        <a class="change-room-link" href="index.html" data-i18n="index.changeRoom">Change room</a>
         <div class="download-row">
           <button id="download-srt">SRT</button>
           <button id="download-vtt">VTT</button>
           <button id="download-txt">TXT</button>
         </div>
         <div class="font-size-controls">
-          <button id="font-decrease" aria-label="Decrease font size">A-</button>
-          <button id="font-increase" aria-label="Increase font size">A+</button>
+          <button id="font-decrease" aria-label="Decrease font size" data-i18n-aria-label="index.decreaseFontSize">A-</button>
+          <button id="font-increase" aria-label="Increase font size" data-i18n-aria-label="index.increaseFontSize">A+</button>
         </div>
       </div>
     </header>
@@ -230,13 +230,14 @@
       <div id="segments-container"></div>
     </div>
 
-    <button id="jump-to-live" class="jump-to-live primary" style="display: none">
+    <button id="jump-to-live" class="jump-to-live primary" style="display: none" data-i18n="index.jumpToLive">
       Jump to live
     </button>
 
     <div id="interim-bar" class="interim-bar" style="display: none"></div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="common.js"></script>
   <script>
     const FONT_SIZE_STORAGE_KEY = "voxlibera.fontSizePx";
@@ -280,6 +281,11 @@
     let currentLanguage = "original";
     let currentRoomName = "";
     let captionsClient = null;
+    let lastConnectionState = "connecting";
+    let lastInterimText = "";
+    let lastInterimLanguage = null;
+    let lastRoomStatus = null;
+    let pickerErrorVisible = false;
 
     function readStoredFontSizePx() {
       try {
@@ -332,8 +338,8 @@
       try {
         roomsData = await fetchRooms();
       } catch (fetchError) {
-        pickerError.textContent =
-          "Could not reach the server. Check your connection and reload.";
+        pickerErrorVisible = true;
+        pickerError.textContent = t("common.couldNotReachServer");
         pickerError.style.display = "block";
         return;
       }
@@ -462,20 +468,16 @@
     }
 
     function handleConnectionChanged(connectionState) {
+      lastConnectionState = connectionState;
       connectionDot.className = `connection-dot connection-dot--${
         connectionState === "connected" ? "connected" : connectionState === "reconnecting" ? "reconnecting" : "disconnected"
       }`;
-      const labels = {
-        connecting: "Connecting…",
-        connected: "Connected",
-        reconnecting: "Reconnecting…",
-        disconnected: "Disconnected",
-      };
-      connectionLabel.textContent = labels[connectionState] || connectionState;
+      connectionLabel.textContent = t(`connection.${connectionState}`) || connectionState;
     }
 
     function handleStatusChanged(roomStatus) {
-      roomStatusLine.textContent = `Room status: ${statusLabel(roomStatus)}`;
+      lastRoomStatus = roomStatus;
+      roomStatusLine.textContent = t("index.roomStatus", { status: statusLabel(roomStatus) });
     }
 
     function handleHistoryReplaced(orderedSegments, roomStatus) {
@@ -531,6 +533,8 @@
     }
 
     function handleInterimChanged(interimText, interimLanguage) {
+      lastInterimText = interimText || "";
+      lastInterimLanguage = interimLanguage;
       if (!interimText) {
         interimBar.style.display = "none";
         return;
@@ -540,7 +544,7 @@
       if (currentLanguage === "original") {
         interimBar.textContent = interimText;
       } else {
-        interimBar.textContent = `${interimText} (original, translating…)`;
+        interimBar.textContent = t("index.interimTranslating", { text: interimText });
       }
     }
 
@@ -579,6 +583,17 @@
     downloadTxtButton.addEventListener("click", () => {
       location.href = exportUrl(currentRoomId, "txt", currentLanguage);
     });
+
+    window.onUiLanguageChanged = () => {
+      if (pickerErrorVisible) {
+        pickerError.textContent = t("common.couldNotReachServer");
+      }
+      if (lastRoomStatus) {
+        handleStatusChanged(lastRoomStatus);
+      }
+      handleConnectionChanged(lastConnectionState);
+      handleInterimChanged(lastInterimText, lastInterimLanguage);
+    };
 
     initializePickerView();
   </script>

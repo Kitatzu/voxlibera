@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vox Libera — OBS Overlay</title>
+  <title data-i18n="obs.title">Vox Libera — OBS Overlay</title>
   <style>
     html,
     body {
@@ -75,17 +75,21 @@
 </head>
 <body>
   <div id="help-text" style="display: none">
-    <strong>Vox Libera — OBS overlay</strong><br />
-    Add <code>room</code> as a query parameter to use this as a browser source, e.g.
-    <code>obs.html?room=main-stage&amp;lang=es&amp;lines=2&amp;size=42&amp;position=bottom</code
-    ><br />
-    Parameters: <code>room</code> (required), <code>lang</code> (default <code>es</code>),
-    <code>lines</code> (default 2), <code>size</code> (font px, default 42),
-    <code>position</code> (<code>bottom</code> or <code>top</code>, default <code>bottom</code>).
+    <strong data-i18n="obs.helpTitle">Vox Libera — OBS overlay</strong><br />
+    <span data-i18n-html="obs.helpUsage">
+      Add <code>room</code> as a query parameter to use this as a browser source, e.g.
+      <code>obs.html?room=main-stage&amp;lang=es&amp;lines=2&amp;size=42&amp;position=bottom</code>
+    </span><br />
+    <span data-i18n-html="obs.helpParams">
+      Parameters: <code>room</code> (required), <code>lang</code> (default <code>es</code>),
+      <code>lines</code> (default 2), <code>size</code> (font px, default 42),
+      <code>position</code> (<code>bottom</code> or <code>top</code>, default <code>bottom</code>).
+    </span>
   </div>
 
   <div id="overlay-container"></div>
 
+  <script src="i18n.js"></script>
   <script src="common.js"></script>
   <script>
     const SILENCE_CLEAR_TIMEOUT_MS = 8000;
@@ -100,6 +104,16 @@
     const maximumLineCount = parseInt(queryParameters.get("lines"), 10) || 2;
     const fontSizePx = parseInt(queryParameters.get("size"), 10) || 42;
     const overlayPosition = queryParameters.get("position") === "top" ? "top" : "bottom";
+
+    // obs.html has no shared navigation, so it has no language toggle.
+    // Support an explicit ?ui=es|en override; otherwise fall back to the
+    // browser language, like every other page.
+    const requestedUiLanguage = queryParameters.get("ui");
+    const overlayUiLanguage =
+      requestedUiLanguage === "es" || requestedUiLanguage === "en"
+        ? requestedUiLanguage
+        : getUiLanguage();
+    applyTranslations(document, overlayUiLanguage);
 
     const overlayContainer = document.getElementById("overlay-container");
     const helpText = document.getElementById("help-text");
