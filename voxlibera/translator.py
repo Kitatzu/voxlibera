@@ -73,6 +73,7 @@ class Translator:
             },
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
             max_output_tokens=1024,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
     async def translate(self, sentence: str, previous_sentence: str | None) -> TranslationResult | None:

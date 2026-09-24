@@ -16,6 +16,7 @@ deadline, flushing its pending interim text as final.
 import asyncio
 import contextlib
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 AUDIO_MIME_TYPE = "audio/pcm;rate=16000"
 AUDIO_QUEUE_CHUNKS = 600  # 60 s of 100 ms chunks buffered per session at most
-PROACTIVE_ROTATION_SECONDS = 540
+# Rotate before the ~590 s limit even if GoAway never arrives. Lower it to test rotation quickly.
+PROACTIVE_ROTATION_SECONDS = float(os.environ.get("VOXLIBERA_ROTATION_SECONDS", "540"))
 MAX_HANDOFF_WAIT_SECONDS = 30
 RECONNECT_BACKOFF_SECONDS = (1, 2, 5, 10)
 
@@ -107,9 +109,10 @@ class _LiveSession:
             return
         self.closed = True
         current = asyncio.current_task()
-        for task in self._tasks:
-            if task is not current:
-                task.cancel()
+        pending = [task for task in self._tasks if task is not current]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
         if self._connection_context is not None:
             with contextlib.suppress(Exception):
                 await self._connection_context.__aexit__(None, None, None)
@@ -197,13 +200,13 @@ class LiveTranscriber:
         logger.info("Rotating live session (%s)", reason)
         self.stats.rotating = True
         self._handoff_deadline = time.monotonic() + MAX_HANDOFF_WAIT_SECONDS
-        self.callbacks.on_state_change()
         try:
+            self._notify_state_change()
             self.incoming = await self._open_session()
         except Exception as error:
-            self._record_error(f"rotation connect failed: {error}")
             self.stats.rotating = False
             self._handoff_deadline = None
+            self._record_error(f"rotation connect failed: {error}")
 
     async def _complete_handoff(self, overlap_reference: str) -> None:
         async with self._lock:
@@ -214,25 +217,34 @@ class LiveTranscriber:
             self.stats.rotations += 1
             self.stats.rotating = False
             self._handoff_deadline = None
-        self.callbacks.on_state_change()
+        self._notify_state_change()
         if previous is not None:
             await previous.close()
             logger.info("Handoff complete: session #%s -> #%s", previous.number, self.active.number)
 
     async def _supervise(self) -> None:
+        """Proactive rotation and forced handoff. Must never die: it is the safety net for 1008 aborts."""
         while not self._stopping:
             await asyncio.sleep(1)
-            active = self.active
-            if active is None:
-                continue
-            age = time.monotonic() - active.opened_at
-            if age > PROACTIVE_ROTATION_SECONDS and self.incoming is None:
-                await self._begin_rotation("proactive timer")
-            if self._handoff_deadline and time.monotonic() > self._handoff_deadline and self.incoming:
-                pending = active.last_interim_text
-                if pending:
-                    self.callbacks.on_final(pending, None)
-                await self._complete_handoff(pending)
+            try:
+                await self._supervise_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                self._record_error(f"supervisor: {error}")
+
+    async def _supervise_once(self) -> None:
+        active = self.active
+        if active is None:
+            return
+        age = time.monotonic() - active.opened_at
+        if age > PROACTIVE_ROTATION_SECONDS and self.incoming is None:
+            await self._begin_rotation("proactive timer")
+        if self._handoff_deadline and time.monotonic() > self._handoff_deadline and self.incoming:
+            pending = active.last_interim_text
+            if pending:
+                self.callbacks.on_final(pending, None)
+            await self._complete_handoff(pending)
 
     # --- message handling --------------------------------------------------
 
@@ -286,12 +298,19 @@ class LiveTranscriber:
                 await self._complete_handoff(session.last_interim_text)
             else:
                 self.active = None
-                self.callbacks.on_state_change()
+                self._notify_state_change()
                 self.active = await self._open_session_with_retry()
-                self.callbacks.on_state_change()
+                self._notify_state_change()
 
     def _record_error(self, description: str) -> None:
         logger.warning("Transcriber error: %s", description)
         self.stats.errors += 1
         self.stats.last_error = description[:300]
-        self.callbacks.on_state_change()
+        self._notify_state_change()
+
+    def _notify_state_change(self) -> None:
+        """Callbacks belong to the room; a bug there must never break session management."""
+        try:
+            self.callbacks.on_state_change()
+        except Exception:
+            logger.exception("on_state_change callback failed")
