@@ -299,7 +299,16 @@ class Room:
             "caption_lag_seconds": round(self.caption_lag_seconds, 2) if self.caption_lag_seconds is not None else None,
             "translation_latency_ms": round(self.translation_latency_ms) if self.translation_latency_ms is not None else None,
             "estimated_cost_usd": round(self.estimated_cost_usd(), 4),
+            "source_language": self.source_language,
+            "last_caption": self._last_caption(),
         }
+
+    def _last_caption(self) -> dict | None:
+        """Latest visible sentence, so production can check at a glance what the room is hearing."""
+        for segment in sorted(self.segments.values(), key=lambda item: item.id, reverse=True):
+            if segment.original:
+                return {"original": segment.original, "translations": segment.translations}
+        return None
 
     def history(self) -> list[dict]:
         return [segment.to_dict() for segment in sorted(self.segments.values(), key=lambda item: item.id)]

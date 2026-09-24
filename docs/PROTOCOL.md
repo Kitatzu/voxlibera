@@ -15,6 +15,9 @@ Reading captions, rooms and exports never needs the key.
 
 ### `GET /api/rooms`
 
+Metrics that don't exist yet are `null` (e.g. `translation_latency_ms` before the first translation,
+`last_caption` before anything was heard). Clients must handle that.
+
 ```json
 {
   "languages": ["original", "es", "en", "pt"],
@@ -35,7 +38,9 @@ Reading captions, rooms and exports never needs the key.
       "last_error": null,
       "caption_lag_seconds": 1.2,
       "translation_latency_ms": 1350,
-      "estimated_cost_usd": 0.041
+      "estimated_cost_usd": 0.041,
+      "source_language": "en",
+      "last_caption": {"original": "Latest sentence heard.", "translations": {"es": "Última oración escuchada."}}
     }
   ]
 }
