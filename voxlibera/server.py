@@ -198,13 +198,16 @@ def load_dotenv(path: str = ".env") -> None:
     """Minimal .env support (KEY=VALUE lines); real environment variables win."""
     if not os.path.isfile(path):
         return
-    with open(path, encoding="utf-8") as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    with open(path, "rb") as file:
+        raw = file.read()
+    # PowerShell 5.1 `echo > .env` writes UTF-16 with a BOM.
+    encoding = "utf-16" if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
+    for line in raw.decode(encoding).splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def main() -> None:

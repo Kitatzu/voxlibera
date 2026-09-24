@@ -30,6 +30,9 @@ echo GEMINI_API_KEY=your-key > .env   # git-ignored; environment variables work 
 voxlibera-server
 ```
 
+> **Windows PowerShell:** create the file with `Set-Content .env "GEMINI_API_KEY=your-key" -Encoding ascii`
+> (`echo >` writes UTF-16, which Docker Compose can't read).
+
 Then open:
 
 | URL | What |
