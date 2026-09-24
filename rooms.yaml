@@ -7,7 +7,14 @@
 # Keep it short (< 100 terms per room works best). The top-level glossary is shared.
 
 glossary:
+  - Vox Libera
   - Nerdearla
+  - OBS
+  - SRT
+  - VTT
+  - Apache
+  - open source
+  - GitHub
   - Kubernetes
   - Pod
   - deploy
