@@ -427,6 +427,8 @@
       const segmentElement = document.createElement("div");
       segmentElement.className = "segment";
       segmentElement.dataset.segmentId = String(segment.id);
+      // An empty original means the final transcript merged this sentence into a previous one.
+      segmentElement.hidden = !segment.original;
 
       const timeElement = document.createElement("span");
       timeElement.className = "segment-time";

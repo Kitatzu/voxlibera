@@ -50,6 +50,34 @@ def test_final_commits_remainder_and_reports_corrections():
     assert segmenter.pending_text == ""
 
 
+def test_final_that_merges_sentences_blanks_the_leftovers():
+    # Real case: interims split two sentences, the final merged them with a comma.
+    segmenter = SentenceSegmenter()
+    feed(segmenter, [
+        "Specifically Kuokkala. And I can see Kuokkala, that's a Finnish name. This is",
+        "Specifically Kuokkala. And I can see Kuokkala, that's a Finnish name. This is",
+        "Specifically Kuokkala. And I can see Kuokkala, that's a Finnish name. This is probably",
+    ])
+    update = segmenter.on_final(
+        "Specifically Kuokkala. And I can see Kokkola, that's a Finnish name, this is probably Finland.",
+        audio_time=9,
+    )
+    assert [(correction.utterance_index, correction.text) for correction in update.corrections] == [
+        (1, "And I can see Kokkola, that's a Finnish name, this is probably Finland."),
+    ]
+    assert update.committed == []
+
+
+def test_final_with_fewer_sentences_blanks_extra_committed_ones():
+    segmenter = SentenceSegmenter()
+    feed(segmenter, ["One. Two. Three", "One. Two. Three"])
+    update = segmenter.on_final("One, two and three.", audio_time=5)
+    assert [(correction.utterance_index, correction.text) for correction in update.corrections] == [
+        (0, "One, two and three."),
+        (1, ""),
+    ]
+
+
 def test_timestamps_are_monotonic():
     segmenter = SentenceSegmenter()
     feed(segmenter, ["One. Two", "One. Two", "One. Two. Three", "One. Two. Three"])

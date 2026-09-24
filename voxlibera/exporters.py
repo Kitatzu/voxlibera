@@ -44,9 +44,14 @@ def _caption_chunks(text: str, start: float, end: float) -> list[tuple[str, floa
     return timed
 
 
+def _visible(segments: Iterable[Segment]) -> list[Segment]:
+    """Sorted segments, without the ones blanked because the final transcript merged them."""
+    return sorted((segment for segment in segments if segment.original), key=lambda item: item.start)
+
+
 def _timed_captions(segments: Iterable[Segment], language: str) -> list[tuple[str, float, float]]:
     captions: list[tuple[str, float, float]] = []
-    for segment in sorted(segments, key=lambda item: item.start):
+    for segment in _visible(segments):
         captions.extend(_caption_chunks(segment_text(segment, language), segment.start, segment.end))
     return captions
 
@@ -66,8 +71,7 @@ def to_vtt(segments: Iterable[Segment], language: str) -> str:
 
 
 def to_text(segments: Iterable[Segment], language: str) -> str:
-    ordered = sorted(segments, key=lambda item: item.start)
-    return "\n".join(segment_text(segment, language) for segment in ordered) + "\n"
+    return "\n".join(segment_text(segment, language) for segment in _visible(segments)) + "\n"
 
 
 EXPORTERS = {"srt": to_srt, "vtt": to_vtt, "txt": to_text}

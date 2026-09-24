@@ -77,6 +77,12 @@ class SentenceSegmenter:
             for index, sentence in enumerate(sentences[: len(self.committed_texts)])
             if not same_sentence(sentence, self.committed_texts[index])
         ]
+        # The final may merge sentences that interims had split: blank the leftovers so
+        # their text isn't shown twice (it now lives inside an earlier corrected sentence).
+        corrections += [
+            Correction(utterance_index=index, text="")
+            for index in range(len(sentences), len(self.committed_texts))
+        ]
         remaining = sentences[len(self.committed_texts):]
         committed: list[CommittedSentence] = []
         for offset, sentence in enumerate(remaining):

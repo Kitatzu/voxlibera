@@ -79,6 +79,8 @@ Rules for clients:
 - **Upsert segments by `id`.** The same segment is sent again when its translations arrive
   and again if the final transcript corrects it.
 - `translations` can be `{}` while the translation is in flight: show `original` meanwhile.
+- **Hide segments whose `original` is empty.** That happens when the final transcript merged the
+  sentence into a previous one (which is re-sent with the merged text).
 - `interim` is the not-yet-committed tail of what the speaker is saying, in the source language.
   It replaces the previous interim (never append). Show it only when the viewer picked `original`,
   or dimmed while waiting for translations.

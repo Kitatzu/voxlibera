@@ -157,7 +157,8 @@ class Room:
             segment.original = correction.text
             segment.translations = {}
             self._store_and_publish(segment)
-            self._request_translation(segment)
+            if correction.text:
+                self._request_translation(segment)
 
         for sentence in update.committed:
             segment = Segment(
