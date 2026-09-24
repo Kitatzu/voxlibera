@@ -203,6 +203,22 @@ button.primary {
   border-color: var(--color-accent);
 }
 
+.top-nav-on-air {
+  color: #ff4d4f;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  animation: top-nav-on-air-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes top-nav-on-air-pulse {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-nav-on-air { animation: none; }
+}
+
 .top-nav-language-toggle {
   display: flex;
   gap: 0.25rem;

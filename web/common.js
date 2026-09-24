@@ -175,11 +175,24 @@ function setupAdminKeyButton(buttonElement) {
  * id="top-navigation". `activePage` is one of "captions", "broadcast",
  * "dashboard".
  */
+// While a page must stay open (e.g. broadcast.html capturing audio), navigating away
+// in the same tab would kill it: the nav then opens pages in a new tab instead.
+let keepPageAlive = false;
+let lastRenderedNavigationPage = null;
+
+function setKeepPageAlive(enabled) {
+  keepPageAlive = enabled;
+  if (lastRenderedNavigationPage) {
+    renderTopNavigation(lastRenderedNavigationPage);
+  }
+}
+
 function renderTopNavigation(activePage) {
   const container = document.getElementById("top-navigation");
   if (!container) {
     return;
   }
+  lastRenderedNavigationPage = activePage;
 
   const headerElement = document.createElement("header");
   headerElement.className = "top-nav";
@@ -210,10 +223,21 @@ function renderTopNavigation(activePage) {
     }
     linkElement.href = page.href;
     linkElement.textContent = t(page.labelKey);
+    if (keepPageAlive && page.key !== activePage) {
+      linkElement.target = "_blank";
+      linkElement.rel = "noopener";
+      linkElement.title = t("nav.opensInNewTab");
+    }
     navigationElement.appendChild(linkElement);
   }
 
   innerElement.appendChild(navigationElement);
+  if (keepPageAlive) {
+    const onAirElement = document.createElement("span");
+    onAirElement.className = "top-nav-on-air";
+    onAirElement.textContent = t("nav.onAir");
+    innerElement.appendChild(onAirElement);
+  }
   innerElement.appendChild(buildLanguageToggle(activePage));
   headerElement.appendChild(innerElement);
 

@@ -16,6 +16,8 @@ const translations = {
     "nav.captions": "Captions",
     "nav.broadcast": "Broadcast",
     "nav.dashboard": "Dashboard",
+    "nav.onAir": "● On air",
+    "nav.opensInNewTab": "Opens in a new tab so the broadcast keeps running",
     "nav.switchLanguage": "Switch to {language}",
 
     "common.adminKeyButton": "🔑 Admin key",
@@ -140,6 +142,8 @@ const translations = {
     "nav.captions": "Subtítulos",
     "nav.broadcast": "Transmitir",
     "nav.dashboard": "Panel",
+    "nav.onAir": "● Al aire",
+    "nav.opensInNewTab": "Se abre en otra pestaña para que la transmisión siga",
     "nav.switchLanguage": "Cambiar a {language}",
 
     "common.adminKeyButton": "🔑 Clave de administrador",

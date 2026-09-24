@@ -603,6 +603,7 @@
 
       ingestSocket.addEventListener("open", () => {
         isLive = true;
+        setKeepPageAlive(true);
         startStopButton.textContent = t("broadcast.stop");
         startStopButton.disabled = false;
         liveStatus.hidden = false;
@@ -724,6 +725,7 @@
     }
 
     function stopCaptureAndCleanup() {
+      setKeepPageAlive(false);
       if (elapsedIntervalId) {
         clearInterval(elapsedIntervalId);
         elapsedIntervalId = null;
@@ -850,7 +852,16 @@
       return translatedText || segment.original;
     }
 
-    window.addEventListener("beforeunload", () => {
+    // Ask before leaving while live. Don't clean up here: the viewer may press "Cancel".
+    window.addEventListener("beforeunload", (event) => {
+      if (isLive) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    });
+
+    // The page is really going away: release the microphone and close the socket.
+    window.addEventListener("pagehide", () => {
       if (isLive) {
         stopCaptureAndCleanup();
       }
