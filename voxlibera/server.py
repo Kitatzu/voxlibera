@@ -5,9 +5,10 @@ import asyncio
 import contextlib
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -52,6 +53,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown room '{room_id}'")
         return room
 
+    def is_admin(key: str | None) -> bool:
+        if not settings.admin_key:
+            return True
+        return key is not None and secrets.compare_digest(key.encode(), settings.admin_key.encode())
+
+    def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
+        if not is_admin(x_admin_key):
+            raise HTTPException(status_code=401, detail="Admin key required")
+
+    admin_only = [Depends(require_admin)]
+
     @app.get("/healthz")
     async def health() -> dict:
         return {"ok": True}
@@ -60,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def list_rooms() -> dict:
         return {
             "languages": ["original", *settings.target_languages],
+            "admin_required": bool(settings.admin_key),
             "rooms": [room.snapshot() for room in rooms.values()],
         }
 
@@ -73,7 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return {"samples": samples}
 
-    @app.post("/api/rooms/{room_id}/simulate")
+    @app.post("/api/rooms/{room_id}/simulate", dependencies=admin_only)
     async def simulate(room_id: str, request: SimulateRequest) -> dict:
         room = get_room(room_id)
         sample_path = (settings.samples_dir / request.sample).resolve()
@@ -87,12 +100,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="Room already has an audio source")
         return {"ok": True}
 
-    @app.post("/api/rooms/{room_id}/stop")
+    @app.post("/api/rooms/{room_id}/stop", dependencies=admin_only)
     async def stop(room_id: str) -> dict:
         await get_room(room_id).stop_source()
         return {"ok": True}
 
-    @app.post("/api/rooms/{room_id}/reset")
+    @app.post("/api/rooms/{room_id}/reset", dependencies=admin_only)
     async def reset(room_id: str) -> dict:
         room = get_room(room_id)
         if room.has_source:
@@ -150,7 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if room is None:
             await websocket.close(code=CLOSE_ROOM_NOT_FOUND, reason="Unknown room")
             return
-        if settings.ingest_token and token != settings.ingest_token:
+        if not is_admin(token):
             await websocket.close(code=CLOSE_UNAUTHORIZED, reason="Invalid token")
             return
         try:

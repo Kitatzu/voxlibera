@@ -61,7 +61,7 @@ Each stage (room) accepts **one audio source**. Rooms are defined in [`rooms.yam
 | List microphones | `voxlibera-source --list-devices` |
 
 The source can run on the same machine as the server or on a laptop next to the stage mixer
-(`--server wss://captions.example.org`). Protect ingestion with `VOXLIBERA_INGEST_TOKEN` and pass `--token`.
+(`--server wss://captions.example.org`). If the server sets `VOXLIBERA_ADMIN_KEY`, pass it with `--token`.
 
 ---
 
@@ -162,7 +162,7 @@ Tip: update each stage's glossary with the next speaker's name and talk keywords
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Live transcription model. |
 | `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Translation model. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Stages served by this instance. |
-| `VOXLIBERA_INGEST_TOKEN` | — | If set, audio sources must send `?token=`. |
+| `VOXLIBERA_ADMIN_KEY` | — | **Set it on any public deployment.** Required to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. |
 | `VOXLIBERA_DATA_DIR` | `data/` | Where transcripts are persisted (JSONL per stage). |
 | `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `0.0.0.0` | Server bind address. |
 

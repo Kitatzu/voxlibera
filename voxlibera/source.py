@@ -86,7 +86,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Stream stage audio to a Vox Libera room")
     parser.add_argument("--server", default="ws://localhost:8000", help="Vox Libera server (ws:// or wss://)")
     parser.add_argument("--room", help="Room id from rooms.yaml")
-    parser.add_argument("--token", help="Ingest token if the server sets VOXLIBERA_INGEST_TOKEN")
+    parser.add_argument("--token", help="Admin key, if the server sets VOXLIBERA_ADMIN_KEY")
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument("--file", help="Audio/video file, streamed at real-time speed")
     inputs.add_argument("--url", help="Live stream URL readable by ffmpeg (RTMP, SRT, HLS...)")

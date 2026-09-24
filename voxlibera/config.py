@@ -18,7 +18,9 @@ class Settings:
     samples_dir: Path = PROJECT_ROOT / "samples"
     data_dir: Path = PROJECT_ROOT / "data"
     web_dir: Path = PROJECT_ROOT / "web"
-    ingest_token: str | None = None
+    # One key protects every production action: broadcasting audio, simulate, stop, reset.
+    # The audience never needs it. None = open (fine on a laptop or a closed venue network).
+    admin_key: str | None = None
     # Prices in USD, used only for the dashboard cost estimate. Check ai.google.dev/pricing.
     transcription_usd_per_minute: float = 0.009
     translation_usd_per_million_input_tokens: float = 0.30
@@ -40,7 +42,9 @@ class Settings:
         ):
             if os.environ.get(variable):
                 setattr(settings, attribute, Path(os.environ[variable]))
-        settings.ingest_token = os.environ.get("VOXLIBERA_INGEST_TOKEN") or None
+        settings.admin_key = (
+            os.environ.get("VOXLIBERA_ADMIN_KEY") or os.environ.get("VOXLIBERA_INGEST_TOKEN") or None
+        )
         return settings
 
 

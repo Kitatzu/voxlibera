@@ -2,6 +2,15 @@
 
 All endpoints are served by the FastAPI server (default `http://localhost:8000`).
 
+## Admin key
+
+If the server sets `VOXLIBERA_ADMIN_KEY`, `GET /api/rooms` returns `"admin_required": true` and:
+
+- `POST` endpoints (`simulate`, `stop`, `reset`) need the header `X-Admin-Key: <key>` (401 otherwise).
+- The audio ingest WebSocket needs `?token=<key>` (closed with 4401 otherwise).
+
+Reading captions, rooms and exports never needs the key.
+
 ## REST
 
 ### `GET /api/rooms`
