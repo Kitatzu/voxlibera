@@ -1,0 +1,14 @@
+services:
+  voxlibera:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
+      VOXLIBERA_INGEST_TOKEN: ${VOXLIBERA_INGEST_TOKEN:-}
+    volumes:
+      - voxlibera-data:/data
+      - ./rooms.yaml:/app/rooms.yaml:ro
+
+volumes:
+  voxlibera-data:

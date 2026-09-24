@@ -36,6 +36,7 @@ class Settings:
             ("rooms_file", "VOXLIBERA_ROOMS_FILE"),
             ("samples_dir", "VOXLIBERA_SAMPLES_DIR"),
             ("data_dir", "VOXLIBERA_DATA_DIR"),
+            ("web_dir", "VOXLIBERA_WEB_DIR"),
         ):
             if os.environ.get(variable):
                 setattr(settings, attribute, Path(os.environ[variable]))
