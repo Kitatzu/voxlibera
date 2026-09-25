@@ -371,7 +371,21 @@
           selectRoom(requestedRoom);
         }
       }
+      setInterval(refreshRoomStatuses, ROOM_STATUS_REFRESH_MS);
     }
+
+    // Room statuses change while this page is open (someone else goes live, a room stops).
+    async function refreshRoomStatuses() {
+      try {
+        const roomsData = await fetchRooms();
+        availableRooms = roomsData.rooms || availableRooms;
+        renderRoomChoices();
+      } catch (fetchError) {
+        // Transient network error: keep the last known statuses.
+      }
+    }
+
+    const ROOM_STATUS_REFRESH_MS = 3000;
 
     function renderRoomChoices() {
       roomChoiceGrid.innerHTML = "";
@@ -384,12 +398,17 @@
         nameSpan.textContent = room.name;
         roomButton.appendChild(nameSpan);
 
+        const isOwnLiveRoom = isLive && room.id === selectedRoomId;
         const statusSpan = document.createElement("span");
         statusSpan.className = "choice-button-subtext";
-        statusSpan.textContent = room.source_connected ? t("broadcast.alreadyLive") : statusLabel(room.status);
+        if (isOwnLiveRoom) {
+          statusSpan.textContent = statusLabel("live");
+        } else {
+          statusSpan.textContent = room.source_connected ? t("broadcast.alreadyLive") : statusLabel(room.status);
+        }
         roomButton.appendChild(statusSpan);
 
-        if (room.source_connected) {
+        if (room.source_connected && !isOwnLiveRoom) {
           roomButton.disabled = true;
         }
         if (room.id === selectedRoomId) {
