@@ -79,6 +79,35 @@ escenario (`--server wss://subtitulos.ejemplo.org`). Si el servidor define `VOXL
 
 ---
 
+## Guía para el día del evento
+
+Checklist para el equipo de producción. Una vez levantado el servidor, no hace falta la línea de comandos.
+
+**El día anterior**
+- [ ] Desplegar con Docker detrás de HTTPS. Definir `GEMINI_API_KEY` y `VOXLIBERA_ADMIN_KEY` en `.env`.
+- [ ] Una sala por escenario en `rooms.yaml`, con los nombres de los oradores y los términos clave en cada `glossary`.
+- [ ] Abrir el **Panel** y presionar **▶ Reproducir ejemplo** en cada escenario: todas las tarjetas deben pasar a *En vivo* y mostrar una "Última frase escuchada".
+- [ ] Imprimir un código QR por escenario que apunte a `/?room=<escenario>&lang=es` (y uno por idioma si se quiere).
+- [ ] Agregar el overlay a cada stream en OBS/vMix: `/obs.html?room=<escenario>&lang=es`.
+
+**En cada escenario (5 minutos)**
+- [ ] Conectar una notebook a la salida de la consola (placa de audio USB o entrada de línea).
+- [ ] Abrir `/broadcast.html` → elegir el escenario → 🎙 **Micrófono** → elegir la placa → **Transmitir**.
+- [ ] Verificar que el medidor de nivel se mueve y que aparecen subtítulos en la vista previa. Dejar esa pestaña abierta: muestra **● Al aire**.
+
+**Durante las charlas: mirar el Panel**
+| Si ves | Significa | Qué hacer |
+|---|---|---|
+| *En vivo*, la "Última frase escuchada" coincide con el orador | Todo bien | Nada |
+| *Rotando sesión* por unos segundos | Normal, cada ~9 min | Nada |
+| "Sin audio detectado" en la notebook del escenario | Problema de consola o cable | Revisar el nivel de salida de la consola |
+| Los errores suben, estado *Error* | Problema de red o de la API | El servidor se reconecta solo; si persiste, **Detener** y volver a transmitir |
+
+**Entre charlas**
+- [ ] **⬇ Descargar** la transcripción (SRT / VTT / TXT, en cualquier idioma) y después **🗑 Borrar transcripción** para la próxima charla.
+
+---
+
 ## Cómo funciona
 
 ```mermaid

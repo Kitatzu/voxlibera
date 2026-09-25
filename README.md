@@ -78,6 +78,35 @@ The source can run on the same machine as the server or on a laptop next to the 
 
 ---
 
+## Event-day runbook
+
+A checklist for the production team. No command line needed once the server is up.
+
+**The day before**
+- [ ] Deploy with Docker behind HTTPS. Set `GEMINI_API_KEY` and `VOXLIBERA_ADMIN_KEY` in `.env`.
+- [ ] One room per stage in `rooms.yaml`, with the speakers' names and key terms in each `glossary`.
+- [ ] Open the **Dashboard** and press **▶ Play sample** on every stage: all cards should turn *Live* and show a "Last heard" sentence.
+- [ ] Print a QR code per stage pointing to `/?room=<stage>&lang=es` (and one per language if you like).
+- [ ] Add the overlay to each stream in OBS/vMix: `/obs.html?room=<stage>&lang=es`.
+
+**At each stage (5 minutes)**
+- [ ] Connect a laptop to the mixer output (USB audio interface or line in).
+- [ ] Open `/broadcast.html` → pick the stage → 🎙 **Microphone** → choose the interface → **Start broadcasting**.
+- [ ] Check the level meter moves and captions appear in the preview. Leave that tab open: it shows **● On air**.
+
+**During the talks: watch the Dashboard**
+| You see | Meaning | Action |
+|---|---|---|
+| *Live*, "Last heard" matches the speaker | All good | Nothing |
+| *Rotating* for a few seconds | Normal, every ~9 min | Nothing |
+| "No audio detected" on the stage laptop | Mixer or cable issue | Check the mixer output level |
+| Errors growing, status *Error* | Network or API problem | The server reconnects on its own; if it persists, **Stop** and broadcast again |
+
+**Between talks**
+- [ ] **⬇ Download** the transcript (SRT / VTT / TXT, any language), then **🗑 Clear transcript** for the next talk.
+
+---
+
 ## How it works
 
 ```mermaid
