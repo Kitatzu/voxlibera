@@ -41,6 +41,30 @@ def test_ingest_rejects_wrong_key(settings):
             assert message["code"] == 4401
 
 
+def test_stale_source_audio_is_ignored_after_a_new_source_starts(settings, monkeypatch):
+    # Real bug: a broadcast tab stopped from the dashboard kept its socket open and its audio
+    # was mixed into the next broadcast. Each source now has a generation; stale audio is dropped.
+    from voxlibera.room import Room
+
+    async def fake_start(self):
+        return None
+
+    monkeypatch.setattr("voxlibera.live_transcriber.LiveTranscriber.start", fake_start)
+    monkeypatch.setattr("voxlibera.live_transcriber.LiveTranscriber.stop", fake_start)
+    with TestClient(create_app(settings)) as client:
+        room: Room = client.app.state.rooms["main"]
+        first_generation = client.portal.call(room.start_source, "websocket")
+        client.portal.call(room.stop_source)
+        second_generation = client.portal.call(room.start_source, "websocket")
+        assert first_generation and second_generation and first_generation != second_generation
+
+        room.feed_audio(b"\x00" * 3200, first_generation)   # zombie tab
+        room.feed_audio(b"\x00" * 3200, second_generation)  # current tab
+        assert room.audio_bytes == 3200
+        assert not room.is_current_source(first_generation)
+        assert room.is_current_source(second_generation)
+
+
 def test_audience_needs_no_key_and_gets_history(settings):
     settings.admin_key = "secret"
     with TestClient(create_app(settings)) as client:

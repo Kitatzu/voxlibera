@@ -51,6 +51,7 @@ class Room:
         self._background_tasks: set[asyncio.Task] = set()
         self._simulation_process = None
         self._source_lock = asyncio.Lock()
+        self._source_generation = 0
         self._previous_stats = {"sessions_opened": 0, "rotations": 0, "errors": 0}
         self._last_error: str | None = None
         self._transcript_file = settings.data_dir / f"{config.id}.jsonl"
@@ -66,10 +67,17 @@ class Room:
     def has_source(self) -> bool:
         return self.source_kind is not None
 
-    async def start_source(self, kind: str) -> bool:
+    async def start_source(self, kind: str) -> int:
+        """Start a source and return its generation (0 if the room already has one).
+
+        Audio is only accepted from the current generation: a source that was stopped (e.g. from
+        the dashboard) but keeps sending must never be mixed into the next broadcast.
+        """
         async with self._source_lock:
             if self.has_source:
-                return False
+                return 0
+            self._source_generation += 1
+            generation = self._source_generation
             self.source_kind = kind
             self._set_status("starting")
             self._transcriber = LiveTranscriber(
@@ -89,9 +97,14 @@ class Room:
                 self._set_status("error")
                 raise
             self._set_status("live")
-            return True
+            return generation
 
-    def feed_audio(self, chunk: bytes) -> None:
+    def is_current_source(self, generation: int) -> bool:
+        return self.has_source and generation == self._source_generation
+
+    def feed_audio(self, chunk: bytes, generation: int) -> None:
+        if not self.is_current_source(generation):
+            return
         self.audio_bytes += len(chunk)
         if self._transcriber is not None:
             self._transcriber.feed(chunk)
@@ -111,14 +124,17 @@ class Room:
 
     async def start_simulation(self, sample_path: Path) -> bool:
         command = audio_input.file_command(str(sample_path), realtime=True)
-        if not await self.start_source("simulation"):
+        generation = await self.start_source("simulation")
+        if not generation:
             return False
         loop = asyncio.get_running_loop()
         process = audio_input.start_process(command)
         self._simulation_process = process
 
         def pump() -> None:
-            audio_input.pump_chunks(process, lambda chunk: loop.call_soon_threadsafe(self.feed_audio, chunk))
+            audio_input.pump_chunks(
+                process, lambda chunk: loop.call_soon_threadsafe(self.feed_audio, chunk, generation)
+            )
             loop.call_soon_threadsafe(self._schedule, self._finish_simulation(process))
 
         threading.Thread(target=pump, daemon=True, name=f"simulation-{self.config.id}").start()

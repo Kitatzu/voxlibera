@@ -25,6 +25,7 @@ AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".opus", ".m4a", ".flac", ".webm", "
 CLOSE_ROOM_NOT_FOUND = 4404
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_SOURCE_BUSY = 4409
+CLOSE_SOURCE_STOPPED = 4410
 
 
 class SimulateRequest(BaseModel):
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await asyncio.gather(*(room.stop_source() for room in rooms.values()), return_exceptions=True)
 
     app = FastAPI(title="Vox Libera", lifespan=lifespan)
+    app.state.rooms = rooms
 
     def get_room(room_id: str) -> Room:
         room = rooms.get(room_id)
@@ -172,21 +174,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await websocket.close(code=CLOSE_UNAUTHORIZED, reason="Invalid token")
             return
         try:
-            started = await room.start_source("websocket")
+            generation = await room.start_source("websocket")
         except Exception as error:
             await websocket.close(code=1011, reason=f"Could not start transcription: {error}"[:120])
             return
-        if not started:
+        if not generation:
             await websocket.close(code=CLOSE_SOURCE_BUSY, reason="Room already has an audio source")
             return
         try:
             while True:
                 chunk = await websocket.receive_bytes()
-                room.feed_audio(chunk)
+                if not room.is_current_source(generation):
+                    # Stopped from the dashboard (or replaced): hang up so the tab stops sending.
+                    await websocket.close(code=CLOSE_SOURCE_STOPPED, reason="Stopped from the dashboard")
+                    return
+                room.feed_audio(chunk, generation)
         except (WebSocketDisconnect, RuntimeError, KeyError):
             pass
         finally:
-            if room.source_kind == "websocket":
+            if room.is_current_source(generation):
                 await room.stop_source()
 
     if settings.web_dir.exists():
