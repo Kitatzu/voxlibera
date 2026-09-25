@@ -78,6 +78,25 @@ def test_final_with_fewer_sentences_blanks_extra_committed_ones():
     ]
 
 
+def test_first_seen_follows_the_sentence_not_its_position():
+    # Real case: a temporary split creates sentence #2 early; then the model merges it back,
+    # and much later a different sentence takes position #2. Its timing must not be the stale one.
+    segmenter = SentenceSegmenter()
+    interims = [
+        ("Y tú sabes. Yo soy", 1),                                # spurious split: index 1 seen at t=1
+        ("Y tú sabes, yo soy, me encanta", 2),                    # merged back: index 1 gone
+        ("Y tú sabes, yo soy, me encanta trollear.", 5),
+        ("Y tú sabes, yo soy, me encanta trollear. Danny", 8),     # the real next sentence starts
+        ("Y tú sabes, yo soy, me encanta trollear. Danny me", 9),
+        ("Y tú sabes, yo soy, me encanta trollear. Danny me acaba", 10),
+    ]
+    committed = []
+    for text, audio_time in interims:
+        committed.extend(segmenter.on_interim(text, audio_time).committed)
+    assert [sentence.text for sentence in committed] == ["Y tú sabes, yo soy, me encanta trollear."]
+    assert committed[0].end == 8  # when "Danny" really started, not the stale t=1
+
+
 def test_timestamps_are_monotonic():
     segmenter = SentenceSegmenter()
     feed(segmenter, ["One. Two", "One. Two", "One. Two. Three", "One. Two. Three"])
