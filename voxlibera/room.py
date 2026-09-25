@@ -229,6 +229,11 @@ class Room:
         self._utterance_segment_ids = []
         self._next_segment_id = 1
         self.audio_bytes = 0
+        # Metrics describe the current transcript: a new talk starts from zero.
+        self.translation_input_tokens = 0
+        self.translation_output_tokens = 0
+        self.translation_latency_ms = None
+        self.caption_lag_seconds = None
         self._segmenter = SentenceSegmenter()
         with contextlib.suppress(OSError):
             self._transcript_file.unlink(missing_ok=True)
