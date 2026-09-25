@@ -179,6 +179,7 @@ function setupAdminKeyButton(buttonElement) {
 // in the same tab would kill it: the nav then opens pages in a new tab instead.
 let keepPageAlive = false;
 let lastRenderedNavigationPage = null;
+let pageTranslationsApplied = false;
 
 function setKeepPageAlive(enabled) {
   keepPageAlive = enabled;
@@ -243,6 +244,13 @@ function renderTopNavigation(activePage) {
 
   container.innerHTML = "";
   container.appendChild(headerElement);
+  // Static page text (data-i18n) must follow the chosen language on load, not only after a toggle.
+  // Only on the first render: later re-renders (e.g. going on air) must not overwrite text that
+  // the page changed dynamically, like the Start/Stop button. The EN|ES toggle re-applies itself.
+  if (!pageTranslationsApplied) {
+    pageTranslationsApplied = true;
+    applyTranslations(document);
+  }
 }
 
 /**
