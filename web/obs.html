@@ -131,6 +131,7 @@
     let clearTimerId = null;
 
     const segmentsById = new Map();
+    let liveSinceSegmentId = 0;
 
     function refreshCommittedLines() {
       // Segments are upserted (original first, then with translations), so derive lines from state.
@@ -143,15 +144,18 @@
 
     function startOverlay() {
       const captionsClient = new CaptionsClient(roomId);
+      // An overlay shows only what is said after it connects: history (e.g. a previous talk, or
+      // an OBS source reload mid-stream) must never reappear on screen.
       captionsClient.onHistoryReplaced = (orderedSegments) => {
         segmentsById.clear();
-        for (const segment of orderedSegments.slice(-20)) {
-          segmentsById.set(segment.id, segment);
-        }
-        refreshCommittedLines();
+        liveSinceSegmentId = orderedSegments.reduce((highest, segment) => Math.max(highest, segment.id), 0);
+        committedLines = [];
         renderOverlay();
       };
       captionsClient.onSegmentUpserted = (segment) => {
+        if (segment.id <= liveSinceSegmentId) {
+          return;  // e.g. a late translation of a sentence spoken before the overlay connected
+        }
         const isNewSegment = !segmentsById.has(segment.id);
         segmentsById.set(segment.id, segment);
         while (segmentsById.size > 20) {
