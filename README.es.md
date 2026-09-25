@@ -9,11 +9,27 @@ original y en español, inglés y portugués, en su celular o sobreimpresos en e
 Creado para [Nerdearla](https://nerdear.la) 2026 y pensado para que cualquier conferencia lo pueda
 desplegar. Funciona con la Gemini Live API. Licencia Apache 2.0.
 
+> **Probado con carga:** 10 escenarios transcribiendo en paralelo + 200 espectadores, **0 errores**,
+> ~1 s de latencia de traducción, ~150 MB de RAM y ~8% de un núcleo en el servidor,
+> **≈ US$ 0,77 por hora por escenario**.
+
 | Para el público | Para producción |
 |---|---|
 | Elegir escenario e idioma y leer los subtítulos en vivo desde cualquier celular | Un panel para todos los escenarios: estado, latencia, errores, costo |
 | Descargar la transcripción completa (SRT / VTT / TXT) al terminar la charla | URL de overlay para OBS / vMix con fondo transparente, sin chroma key |
 | Funciona con charlas en español e inglés, incluso si se mezclan los idiomas | Glosario por escenario para nombres de oradores y términos técnicos |
+
+---
+
+## Resumen: calidad, latencia, escala, operación, innovación
+
+| | Qué hicimos | Evidencia (medida con charlas reales de Nerdearla) |
+|---|---|---|
+| **Calidad** | Transcripción en streaming con un **glosario por escenario usado dos veces** (reconocimiento de voz + traducción). El traductor ve la oración anterior y corrige errores de reconocimiento. Se quitan muletillas, nunca se resume. | Nombres propios correctos: *Ilya Repin*, *100Devs*, *Kuokkala*. "your eyes" → **"URIs"**. Sin palabras perdidas ni duplicadas en las rotaciones de sesión. |
+| **Latencia** | Sin bloques de audio de 3–5 s: texto parcial en vivo, y cada oración se traduce apenas está completa, sin esperar a que el orador haga una pausa. | Texto original en pantalla **< 1 s** después de dicho. Request de traducción **~1 s**. Oración traducida visible **~1 s después de terminar en charlas en inglés**, ~4 s en español muy fluido (ver *Limitaciones conocidas*). |
+| **Escalabilidad** | Una sesión de Gemini por escenario, sin estado compartido entre escenarios; un request por oración devuelve todos los idiomas; los escenarios se reparten entre instancias por id. | **10 escenarios + 200 espectadores en paralelo: 0 errores, 91.400 mensajes entregados en 3 min, ~150 MB de RAM, ~8% de un núcleo.** 20 sesiones Live simultáneas por key probadas. **≈ US$ 0,77 por hora por escenario.** |
+| **Despliegue y operación** | `docker compose up`, un archivo `.env`. Transmisión desde cualquier navegador, sin instalar nada. Panel con un botón para cada acción, estado en vivo, "última frase escuchada" y costo. Clave de administrador. Interfaz en inglés y español. | [Guía para el día del evento](#guía-para-el-día-del-evento). Imagen de Docker probada de punta a punta. |
+| **Innovación** | Streaming por oraciones estables, rotación de sesiones sin cortes, traducción a todos los idiomas en una llamada, overlay para OBS con fondo transparente, costo en vivo por escenario, "limpiar pantalla" por espectador. | Los subtítulos en inglés del video demo los generó Vox Libera en vivo. |
 
 ---
 
@@ -149,6 +165,7 @@ Medimos la Live API con charlas reales de Nerdearla antes de escribir el pipelin
 
 | Límite | Valor | Notas |
 |---|---|---|
+| Escenarios transcribiendo en paralelo en una instancia | **10 probados: 0 errores**, con 200 espectadores conectados | ~150 MB de RAM, ~8% de un núcleo. |
 | Sesiones Live simultáneas por API key | 20 probadas sin errores | Durante la rotación un escenario usa 2 sesiones por unos segundos. |
 | Tokens de transcripción por minuto | 100K TPM (tier 1) | ~2K tokens/min por stream → **~25 escenarios por key**. |
 | Requests de traducción por día | 150K RPD | ~8–10 oraciones/min por escenario → 10 escenarios × 8 h ≈ 48K requests. |
@@ -184,9 +201,12 @@ map $uri $voxlibera_backend {
 - **Las fuentes de audio son procesos independientes** (una pestaña del navegador o la CLI), una por escenario, en cualquier lugar de la red.
 - **El tráfico del público es mínimo.** Unos pocos mensajes JSON cortos por segundo por escenario, distribuidos por WebSockets. El frontend estático se puede servir desde un CDN.
 
-> Todavía sin pruebas de carga: la capacidad de espectadores por instancia es una estimación. Antes
-> de un evento grande, conviene correr una prueba de carga de WebSockets (por ejemplo, con k6) contra
-> `/ws/rooms/<sala>` con el tamaño de público esperado.
+> **Prueba de carga** (una instancia, notebook con Windows): 10 escenarios reproduciendo charlas
+> reales + 200 espectadores por WebSocket (20 por escenario) durante 3 minutos → 0 errores de
+> transcripción, 0 errores de espectadores, 91.400 mensajes de subtítulos entregados, latencia de
+> traducción ~1 s, US$ 0,39 en total. La capacidad de espectadores más allá de eso es una
+> estimación: antes de un evento grande, conviene correr una prueba de carga contra
+> `/ws/rooms/<sala>` con el público esperado.
 
 ### Costo
 
@@ -295,6 +315,7 @@ Ideas para las próximas iteraciones, más o menos por impacto.
 
 ## Limitaciones conocidas
 
+- **Los subtítulos traducidos llegan más tarde con habla muy rápida y encadenada.** Una oración se traduce cuando su puntuación deja de cambiar. En charlas en inglés eso lleva ~1 s después de que termina la oración; con un orador rápido en español que encadena frases con "y…", ~4 s. El texto en el idioma original siempre está en vivo (< 1 s). Próximo paso: confirmar las oraciones largas por cláusulas.
 - La Live API no ofrece diarización de oradores ni timestamps por palabra; el timing de los subtítulos es por oración.
 - La traducción en vivo de una oración puede diferir un poco de la transcripción final; la versión corregida la reemplaza en pantalla y en las exportaciones.
 - Todavía no hay un modo 100% local (Gemma); el transcriptor y el traductor son módulos aislados para facilitar ese cambio.

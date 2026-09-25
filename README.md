@@ -9,11 +9,26 @@ language plus Spanish, English and Portuguese, on their phone or burned into the
 Built for [Nerdearla](https://nerdear.la) 2026, designed so any conference can deploy it.
 Powered by the Gemini Live API. Licensed under Apache 2.0.
 
+> **Load-tested:** 10 stages transcribing in parallel + 200 viewers, **0 errors**, ~1 s translation
+> latency, ~150 MB RAM and ~8% of one CPU core on the server, **≈ US$ 0.77 per stage-hour**.
+
 | For the audience | For production |
 |---|---|
 | Pick a stage and a language, read live captions on any phone | One dashboard for every stage: status, latency, errors, cost |
 | Download the full transcript (SRT / VTT / TXT) after the talk | OBS / vMix overlay URL, transparent background, no chroma key |
 | Works for Spanish and English talks, with or without code-switching | Per-stage glossary for speaker names and tech jargon |
+
+---
+
+## At a glance: quality, latency, scale, operations, innovation
+
+| | What we did | Evidence (measured with real Nerdearla talks) |
+|---|---|---|
+| **Quality** | Streaming transcription with a per-stage **glossary used twice** (speech recognition + translation). The translator sees the previous sentence and fixes misrecognitions. Filler words removed, content never summarized. | Proper names right: *Ilya Repin*, *100Devs*, *Kuokkala*. "your eyes" → **"URIs"**. Seamless across session rotations: no lost or duplicated words. |
+| **Latency** | No 3–5 s audio chunks: live interim text, and each sentence is translated as soon as it is complete, without waiting for the speaker to pause. | Original text on screen **< 1 s** after it is spoken. Translation request **~1 s**. Translated sentence shown **~1 s after it ends in English talks**, ~4 s in fast-paced Spanish (see *Known limitations*). |
+| **Scalability** | One Gemini session per stage, no shared state between stages; one request per sentence returns every language; stages shard across instances by id. | **10 stages + 200 viewers in parallel: 0 errors, 91,400 messages delivered in 3 min, ~150 MB RAM, ~8% of one core.** 20 concurrent Live sessions per key tested. **≈ US$ 0.77 per stage-hour.** |
+| **Deployment & operations** | `docker compose up`, one `.env` file. Broadcast from any browser, no install. Dashboard with a button for every action, live status, "last heard" sentence and cost. Admin key. EN/ES UI. | [Event-day runbook](#event-day-runbook). Docker image tested end to end. |
+| **Innovation** | Stable-sentence streaming, seamless session rotation, one-call multi-language translation, OBS overlay with transparent background, live cost per stage, per-viewer "clear screen". | The demo video's English subtitles were generated live by Vox Libera itself. |
 
 ---
 
@@ -148,6 +163,7 @@ We measured the Live API with real Nerdearla talks before writing the pipeline.
 
 | Limit | Value | Notes |
 |---|---|---|
+| Stages transcribing in parallel on one instance | **10 tested: 0 errors**, with 200 viewers connected | ~150 MB RAM, ~8% of one CPU core. |
 | Concurrent Live sessions per API key | 20 tested without errors | Rotation briefly uses 2 sessions per stage. |
 | Transcription tokens per minute | 100K TPM (tier 1) | ~2K tokens/min per stream → **~25 stages per key**. |
 | Translation requests per day | 150K RPD | ~8–10 sentences/min per stage → 10 stages × 8 h ≈ 48K requests. |
@@ -183,8 +199,10 @@ map $uri $voxlibera_backend {
 - **Audio sources are independent processes** (a browser tab or the CLI), one per stage, anywhere on the network.
 - **Audience traffic is tiny.** A few short JSON messages per second per stage, fanned out over WebSockets. The static frontend can be served from a CDN.
 
-> Not load-tested yet: viewer capacity per instance is an estimate. Before a big event, run a
-> WebSocket load test (e.g. k6) against `/ws/rooms/<room>` with the expected audience size.
+> **Load test** (one instance, Windows laptop): 10 stages playing real talks + 200 WebSocket viewers
+> (20 per stage) for 3 minutes → 0 transcription errors, 0 viewer errors, 91,400 caption messages
+> delivered, translation latency ~1 s, US$ 0.39 total. Viewer capacity beyond that is an estimate:
+> before a big event, run a WebSocket load test against `/ws/rooms/<room>` with the expected audience.
 
 ### Cost
 
@@ -292,6 +310,7 @@ Ideas for the next iterations, roughly by impact.
 
 ## Known limitations
 
+- **Translated captions arrive later in fast, run-on speech.** A sentence is translated once its punctuation stops changing. In English talks that takes ~1 s after the sentence ends; with a fast Spanish speaker who chains clauses with "y…", ~4 s. The original-language text is always live (< 1 s). Next step: commit long sentences at clause boundaries.
 - Speaker diarization and word-level timestamps are not available in the Live API; subtitle timing is sentence-level.
 - Live translation of a sentence can differ slightly from the final transcript; the corrected version replaces it on screen and in exports.
 - A fully local mode (Gemma) is not implemented yet; the transcriber and translator are isolated modules to make that swap possible.
