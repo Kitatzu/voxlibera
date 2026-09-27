@@ -15,7 +15,14 @@ from google import genai
 from pydantic import BaseModel
 
 from voxlibera.broadcaster import Broadcaster
-from voxlibera.config import Settings, load_rooms
+from voxlibera.config import (
+    Settings,
+    StartupSecurityDecision,
+    StartupSecurityError,
+    env_flag_is_set,
+    evaluate_startup_security,
+    load_rooms,
+)
 from voxlibera.exporters import EXPORTERS, MEDIA_TYPES
 from voxlibera.room import Room
 
@@ -225,7 +232,21 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.environ.get("VOXLIBERA_PORT", "8000")))
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    uvicorn.run(create_app(), host=arguments.host, port=arguments.port)
+
+    settings = Settings.from_environment()
+    allow_open = env_flag_is_set(os.environ.get("VOXLIBERA_ALLOW_OPEN"))
+    try:
+        decision = evaluate_startup_security(arguments.host, settings.admin_key, allow_open)
+    except StartupSecurityError as error:
+        raise SystemExit(str(error)) from error
+    if decision is StartupSecurityDecision.OPEN_ALLOWED:
+        logger.warning(
+            "Starting on '%s' with no VOXLIBERA_ADMIN_KEY set (VOXLIBERA_ALLOW_OPEN is set). "
+            "Anyone who can reach this host can broadcast audio, stop rooms, and wipe transcripts.",
+            arguments.host,
+        )
+
+    uvicorn.run(create_app(settings), host=arguments.host, port=arguments.port)
 
 
 if __name__ == "__main__":
