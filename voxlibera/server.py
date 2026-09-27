@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from voxlibera.broadcaster import Broadcaster
 from voxlibera.config import (
     Settings,
+    INGEST_MAX_AUTH_MESSAGE_CHARACTERS,
     StartupSecurityDecision,
     StartupSecurityError,
     env_flag_is_set,
@@ -124,6 +125,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 websocket.receive_text(), timeout=settings.ingest_auth_timeout_seconds
             )
         except (TimeoutError, WebSocketDisconnect, KeyError):
+            return False
+        # A real auth message is a few dozen bytes; refuse to parse anything bigger.
+        if len(raw_message) > INGEST_MAX_AUTH_MESSAGE_CHARACTERS:
             return False
         try:
             payload = json.loads(raw_message)
@@ -319,7 +323,15 @@ def main() -> None:
             arguments.host,
         )
 
-    uvicorn.run(create_app(settings), host=arguments.host, port=arguments.port)
+    # Keep this the only entry point: the startup security check above does not run if the app
+    # is served some other way (e.g. a module-level `app` for `uvicorn --reload`).
+    # ws_max_size bounds every WebSocket frame at the protocol level, including the pre-auth one.
+    uvicorn.run(
+        create_app(settings),
+        host=arguments.host,
+        port=arguments.port,
+        ws_max_size=settings.ingest_max_message_bytes,
+    )
 
 
 if __name__ == "__main__":

@@ -67,6 +67,16 @@ def test_ingest_rejects_wrong_auth_message(settings):
             assert message["code"] == 4401
 
 
+def test_ingest_rejects_oversized_auth_message(settings):
+    settings.admin_key = "secret"
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": "secret", "padding": "x" * 2048}))
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 4401
+
+
 def test_ingest_query_string_token_no_longer_authenticates(settings):
     # The token used to travel as ?token=<key>. It must now be ignored entirely: the server
     # still requires the auth message even when the (correct) key is passed in the URL.

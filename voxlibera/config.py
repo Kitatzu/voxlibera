@@ -20,6 +20,7 @@ INGEST_MAX_MESSAGE_BYTES = 64 * 1024  # ~20x a real chunk: generous headroom, st
 INGEST_RATE_WINDOW_SECONDS = 5.0  # sliding window used to average out normal jitter
 INGEST_RATE_LIMIT_BYTES_PER_SECOND = 32_000 * 3  # 3x real-time throughput
 INGEST_AUTH_TIMEOUT_SECONDS = 5.0  # time allowed for the first (auth) message to arrive
+INGEST_MAX_AUTH_MESSAGE_CHARACTERS = 1024  # the auth message is tiny; anything bigger is rejected
 
 
 class StartupSecurityDecision(Enum):
