@@ -98,7 +98,7 @@ The source can run on the same machine as the server or on a laptop next to the 
 A checklist for the production team. No command line needed once the server is up.
 
 **The day before**
-- [ ] Deploy with Docker behind HTTPS. Set `GEMINI_API_KEY` and `VOXLIBERA_ADMIN_KEY` in `.env`.
+- [ ] Deploy with Docker behind HTTPS. Set `GEMINI_API_KEY` and `VOXLIBERA_ADMIN_KEY` in `.env` (the server refuses to start on a non-loopback host with no admin key, unless `VOXLIBERA_ALLOW_OPEN=1` is set for a closed venue network).
 - [ ] One room per stage in `rooms.yaml`, with the speakers' names and key terms in each `glossary`.
 - [ ] Open the **Dashboard** and press **▶ Play sample** on every stage: all cards should turn *Live* and show a "Last heard" sentence.
 - [ ] Print a QR code per stage pointing to `/?room=<stage>&lang=es` (and one per language if you like).
@@ -249,7 +249,8 @@ Tip: update each stage's glossary with the next speaker's name and talk keywords
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Live transcription model. |
 | `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Translation model. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Stages served by this instance. |
-| `VOXLIBERA_ADMIN_KEY` | — | **Set it on any public deployment.** Required to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. |
+| `VOXLIBERA_ADMIN_KEY` | — | **Required whenever the server is exposed beyond localhost.** Needed to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. If the server binds to a non-loopback host with no key set, it refuses to start. |
+| `VOXLIBERA_ALLOW_OPEN` | — | Escape hatch for a closed venue network with no `VOXLIBERA_ADMIN_KEY`: set to `1` to start anyway (the server logs a loud warning). Leave unset for any deployment reachable from the internet. |
 | `VOXLIBERA_DATA_DIR` | `data/` | Where transcripts are persisted (JSONL per stage). |
 | `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `0.0.0.0` | Server bind address. |
 

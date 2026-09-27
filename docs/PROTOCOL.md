@@ -7,9 +7,13 @@ All endpoints are served by the FastAPI server (default `http://localhost:8000`)
 If the server sets `VOXLIBERA_ADMIN_KEY`, `GET /api/rooms` returns `"admin_required": true` and:
 
 - `POST` endpoints (`simulate`, `stop`, `reset`) need the header `X-Admin-Key: <key>` (401 otherwise).
-- The audio ingest WebSocket needs `?token=<key>` (closed with 4401 otherwise).
+- The audio ingest WebSocket needs a correct token in its first message, see below (closed with
+  4401 otherwise).
 
 Reading captions, rooms and exports never needs the key.
+
+If the server binds to a non-loopback host with no `VOXLIBERA_ADMIN_KEY` set, it refuses to start
+unless `VOXLIBERA_ALLOW_OPEN=1` is set (intended for a closed venue network only).
 
 ## REST
 
@@ -100,7 +104,26 @@ Rules for clients:
   or dimmed while waiting for translations.
 - `start` / `end` are seconds since the room's audio started.
 
-## WebSocket — audio source: `/ws/ingest/{room_id}?token=INGEST_TOKEN`
+## WebSocket — audio source: `/ws/ingest/{room_id}`
 
-Binary frames of raw PCM, 16-bit little-endian, 16 kHz, mono (ideally 100 ms = 3200 bytes each).
-One source per room; a second source is rejected with close code 4409.
+The token is never sent as a query parameter (it would leak into logs, browser history and proxy
+access logs). Instead, the client's **first message** must be JSON text:
+
+```json
+{"type": "auth", "token": "INGEST_TOKEN"}
+```
+
+Send this message even when the server has no admin key configured (`admin_required: false`):
+in that case, send `"token": ""`. The server waits up to a few seconds for it; a missing, wrong,
+or late auth message closes the connection with code 4401.
+
+After a successful auth message, every following message must be a binary frame of raw PCM,
+16-bit little-endian, 16 kHz, mono (ideally 100 ms = 3200 bytes each). One source per room; a
+second source is rejected with close code 4409.
+
+Limits, to protect the server from a misbehaving or malicious client:
+
+- **Message size**: frames larger than 64 KiB are rejected and the connection is closed with the
+  standard code 1009 (real audio chunks are ~3,200 bytes, so this leaves generous headroom).
+- **Data rate**: sustained throughput above roughly 3x real-time PCM (96,000 bytes/second,
+  averaged with some burst tolerance) closes the connection with app code 4429.
