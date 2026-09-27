@@ -96,7 +96,9 @@ function exportUrl(roomId, format, languageCode) {
  * The server may require an admin key for room-changing actions
  * (simulate, stop, reset, ingest). When required, `GET /api/rooms` reports
  * `admin_required: true`. REST calls send the key via the `X-Admin-Key`
- * header; the ingest WebSocket sends it as a `token` query parameter.
+ * header; the ingest WebSocket sends it as the first message
+ * (`{"type": "auth", "token": "..."}`) instead of a query parameter, so it
+ * never ends up in a URL, log line, or browser history.
  */
 const ADMIN_KEY_STORAGE_KEY = "voxlibera.adminKey";
 

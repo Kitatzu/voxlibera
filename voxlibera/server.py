@@ -3,9 +3,11 @@
 import argparse
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import secrets
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -33,10 +35,40 @@ CLOSE_ROOM_NOT_FOUND = 4404
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_SOURCE_BUSY = 4409
 CLOSE_SOURCE_STOPPED = 4410
+CLOSE_MESSAGE_TOO_LARGE = 1009  # standard WebSocket close code for an oversized message
+CLOSE_RATE_LIMITED = 4429  # app-specific: ingest data rate exceeded the configured limit
 
 
 class SimulateRequest(BaseModel):
     sample: str
+
+
+class IngestRateLimiter:
+    """Token-bucket byte-rate limiter for a single ingest connection.
+
+    The bucket starts full, sized to `window_seconds` worth of traffic at `limit_bytes_per_second`,
+    so short bursts (normal jitter between chunks) are tolerated. Sustained traffic above the limit
+    drains the bucket faster than it refills, and further chunks are rejected once it runs dry.
+    """
+
+    def __init__(self, limit_bytes_per_second: float, window_seconds: float) -> None:
+        self._limit_bytes_per_second = limit_bytes_per_second
+        self._capacity_bytes = limit_bytes_per_second * window_seconds
+        self._available_bytes = self._capacity_bytes
+        self._last_check_time = time.monotonic()
+
+    def allow(self, chunk_bytes: int) -> bool:
+        now = time.monotonic()
+        elapsed_seconds = now - self._last_check_time
+        self._last_check_time = now
+        self._available_bytes = min(
+            self._capacity_bytes,
+            self._available_bytes + elapsed_seconds * self._limit_bytes_per_second,
+        )
+        if chunk_bytes > self._available_bytes:
+            return False
+        self._available_bytes -= chunk_bytes
+        return True
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -77,6 +109,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Admin key required")
 
     admin_only = [Depends(require_admin)]
+
+    async def authenticate_ingest(websocket: WebSocket) -> bool:
+        """Wait for the mandatory first ingest message and check its token.
+
+        Clients always send `{"type": "auth", "token": "..."}` as the very first message,
+        whether or not an admin key is configured, so they never need to know the server's
+        mode. In open mode (no admin key) any token, including an empty string, is accepted.
+        The token is never read from the query string: that would leak it into logs, browser
+        history, and proxy access logs.
+        """
+        try:
+            raw_message = await asyncio.wait_for(
+                websocket.receive_text(), timeout=settings.ingest_auth_timeout_seconds
+            )
+        except (TimeoutError, WebSocketDisconnect, KeyError):
+            return False
+        try:
+            payload = json.loads(raw_message)
+        except ValueError:
+            return False
+        if not isinstance(payload, dict) or payload.get("type") != "auth":
+            return False
+        token = payload.get("token")
+        return isinstance(token, str) and is_admin(token)
 
     @app.get("/healthz")
     async def health() -> dict:
@@ -171,14 +227,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await websocket.close()
 
     @app.websocket("/ws/ingest/{room_id}")
-    async def ingest(websocket: WebSocket, room_id: str, token: str | None = None) -> None:
+    async def ingest(websocket: WebSocket, room_id: str) -> None:
         room = rooms.get(room_id)
         await websocket.accept()
         if room is None:
             await websocket.close(code=CLOSE_ROOM_NOT_FOUND, reason="Unknown room")
             return
-        if not is_admin(token):
-            await websocket.close(code=CLOSE_UNAUTHORIZED, reason="Invalid token")
+        if not await authenticate_ingest(websocket):
+            await websocket.close(code=CLOSE_UNAUTHORIZED, reason="Missing or invalid auth message")
             return
         try:
             generation = await room.start_source("websocket")
@@ -188,9 +244,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not generation:
             await websocket.close(code=CLOSE_SOURCE_BUSY, reason="Room already has an audio source")
             return
+        rate_limiter = IngestRateLimiter(
+            settings.ingest_rate_limit_bytes_per_second, settings.ingest_rate_window_seconds
+        )
         try:
             while True:
                 chunk = await websocket.receive_bytes()
+                if len(chunk) > settings.ingest_max_message_bytes:
+                    logger.warning(
+                        "Ingest message too large for room '%s': %d bytes (limit %d bytes)",
+                        room_id, len(chunk), settings.ingest_max_message_bytes,
+                    )
+                    await websocket.close(code=CLOSE_MESSAGE_TOO_LARGE, reason="Message too large")
+                    return
+                if not rate_limiter.allow(len(chunk)):
+                    logger.warning(
+                        "Ingest rate limit exceeded for room '%s': above %.0f bytes/second",
+                        room_id, settings.ingest_rate_limit_bytes_per_second,
+                    )
+                    await websocket.close(code=CLOSE_RATE_LIMITED, reason="Rate limit exceeded")
+                    return
                 if not room.is_current_source(generation):
                     # Stopped from the dashboard (or replaced): hang up so the tab stops sending.
                     await websocket.close(code=CLOSE_SOURCE_STOPPED, reason="Stopped from the dashboard")
