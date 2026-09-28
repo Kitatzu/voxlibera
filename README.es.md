@@ -9,6 +9,10 @@ original y en español, inglés y portugués, en su celular o sobreimpresos en e
 Creado para [Nerdearla](https://nerdear.la) 2026 y pensado para que cualquier conferencia lo pueda
 desplegar. Funciona con la Gemini Live API. Licencia Apache 2.0.
 
+[![Video demo de Vox Libera (2 minutos, subtitulado en vivo por Vox Libera)](docs/images/demo-thumbnail.png)](https://youtu.be/TI6sGzfA-OY)
+
+▶ **[Mira la demo de 2 minutos](https://youtu.be/TI6sGzfA-OY)**, subtitulada en vivo por el propio Vox Libera.
+
 > **Probado con carga:** 10 escenarios transcribiendo en paralelo + 200 espectadores, **0 errores**,
 > ~1 s de latencia de traducción, ~150 MB de RAM y ~8% de un núcleo en el servidor,
 > **≈ US$ 0,77 por hora por escenario**.
