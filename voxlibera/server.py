@@ -305,7 +305,8 @@ def main() -> None:
 
     load_dotenv()
     parser = argparse.ArgumentParser(description="Run the Vox Libera server")
-    parser.add_argument("--host", default=os.environ.get("VOXLIBERA_HOST", "0.0.0.0"))
+    # Loopback by default so a fresh install runs with no admin key; exposing it is a choice.
+    parser.add_argument("--host", default=os.environ.get("VOXLIBERA_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("VOXLIBERA_PORT", "8000")))
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
