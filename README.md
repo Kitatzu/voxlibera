@@ -9,6 +9,10 @@ language plus Spanish, English and Portuguese, on their phone or burned into the
 Built for [Nerdearla](https://nerdear.la) 2026, designed so any conference can deploy it.
 Powered by the Gemini Live API. Licensed under Apache 2.0.
 
+[![Vox Libera demo video (2 minutes, subtitled live by Vox Libera)](docs/images/demo-thumbnail.png)](https://youtu.be/TI6sGzfA-OY)
+
+▶ **[Watch the 2-minute demo](https://youtu.be/TI6sGzfA-OY)**, subtitled live by Vox Libera itself.
+
 > **Load-tested:** 10 stages transcribing in parallel + 200 viewers, **0 errors**, ~1 s translation
 > latency, ~150 MB RAM and ~8% of one CPU core on the server, **≈ US$ 0.77 per stage-hour**.
 
