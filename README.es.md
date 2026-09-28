@@ -67,6 +67,7 @@ La interfaz está en inglés y en español (selector EN | ES en la barra superio
 
 ```bash
 echo GEMINI_API_KEY=tu-key > .env
+echo VOXLIBERA_ADMIN_KEY=un-valor-largo-y-aleatorio >> .env   # obligatoria: el contenedor escucha en la red
 docker compose up --build        # PORT=8080 docker compose up para usar otro puerto
 ```
 
@@ -100,7 +101,7 @@ escenario (`--server wss://subtitulos.ejemplo.org`). Si el servidor define `VOXL
 Checklist para el equipo de producción. Una vez levantado el servidor, no hace falta la línea de comandos.
 
 **El día anterior**
-- [ ] Desplegar con Docker detrás de HTTPS. Definir `GEMINI_API_KEY` y `VOXLIBERA_ADMIN_KEY` en `.env`.
+- [ ] Desplegar con Docker detrás de HTTPS. Definir `GEMINI_API_KEY` y `VOXLIBERA_ADMIN_KEY` en `.env` (el servidor se niega a iniciar en un host que no sea localhost si no hay una clave de administrador, salvo que se defina `VOXLIBERA_ALLOW_OPEN=1` para una red cerrada de un evento).
 - [ ] Una sala por escenario en `rooms.yaml`, con los nombres de los oradores y los términos clave en cada `glossary`.
 - [ ] Abrir el **Panel** y presionar **▶ Reproducir ejemplo** en cada escenario: todas las tarjetas deben pasar a *En vivo* y mostrar una "Última frase escuchada".
 - [ ] Imprimir un código QR por escenario que apunte a `/?room=<escenario>&lang=es` (y uno por idioma si se quiere).
@@ -177,7 +178,7 @@ Elige la configuración más chica que cubra tu evento; cada paso mantiene el mi
 
 | Tamaño del evento | Configuración | Qué cambia |
 |---|---|---|
-| **1–3 escenarios**, un meetup | `voxlibera-server` en una notebook, el público en el Wi-Fi del lugar | Nada. Se transmite desde el navegador. |
+| **1–3 escenarios**, un meetup | `voxlibera-server` en una notebook, el público en el Wi-Fi del lugar | Definir `VOXLIBERA_HOST=0.0.0.0` y `VOXLIBERA_ADMIN_KEY` para que los teléfonos en el Wi-Fi puedan conectarse. Se transmite desde el navegador. |
 | **Hasta ~25 escenarios** | Un servidor (VM o `docker compose`) detrás de HTTPS, una API key | Definir `VOXLIBERA_ADMIN_KEY`. Una fuente de audio por escenario (navegador o CLI). |
 | **Más de ~25 escenarios** | **Repartir escenarios entre instancias.** Cada instancia tiene su parte de `rooms.yaml` y su API key. Un proxy reverso enruta por id de sala. | Solo configuración (ver abajo). Sin cambios de código. |
 | **Miles de espectadores por escenario** | Varias réplicas de una instancia detrás de un balanceador; reemplazar el difusor en memoria por **Redis Pub/Sub**. | ~40 líneas: la interfaz del [`Broadcaster`](voxlibera/broadcaster.py) son 3 métodos (`publish`, `subscribe`, `unsubscribe`). |
@@ -254,9 +255,10 @@ escenario con el nombre del próximo orador y las palabras clave de su charla.
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Modelo de transcripción en vivo. |
 | `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Modelo de traducción. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Escenarios que sirve esta instancia. |
-| `VOXLIBERA_ADMIN_KEY` | — | **Defínela en cualquier despliegue público.** Se necesita para transmitir audio y para las acciones del panel (las páginas la piden una vez). El público nunca la necesita. |
+| `VOXLIBERA_ADMIN_KEY` | — | **Requerida siempre que el servidor esté expuesto más allá de localhost.** Se necesita para transmitir audio y para las acciones del panel (las páginas la piden una vez). El público nunca la necesita. Si el servidor se enlaza a un host que no sea localhost sin esta clave definida, se niega a iniciar. |
+| `VOXLIBERA_ALLOW_OPEN` | — | Válvula de escape para una red cerrada de un evento sin `VOXLIBERA_ADMIN_KEY`: define `1` para iniciar de todos modos (el servidor registra una advertencia bien visible). Déjala sin definir en cualquier despliegue accesible desde internet. |
 | `VOXLIBERA_DATA_DIR` | `data/` | Dónde se guardan las transcripciones (JSONL por escenario). |
-| `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `0.0.0.0` | Dirección del servidor. |
+| `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `127.0.0.1` | Dirección del servidor. Por defecto solo acepta conexiones de esta máquina; usa `0.0.0.0` para aceptar otros dispositivos (requiere `VOXLIBERA_ADMIN_KEY`). La imagen de Docker usa `0.0.0.0`. |
 
 ---
 

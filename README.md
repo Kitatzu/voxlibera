@@ -66,6 +66,7 @@ The UI is available in English and Spanish (EN | ES switch in the top bar).
 
 ```bash
 echo GEMINI_API_KEY=your-key > .env
+echo VOXLIBERA_ADMIN_KEY=a-long-random-value >> .env   # required: the container listens on the network
 docker compose up --build        # PORT=8080 docker compose up to use another port
 ```
 
@@ -98,7 +99,7 @@ The source can run on the same machine as the server or on a laptop next to the 
 A checklist for the production team. No command line needed once the server is up.
 
 **The day before**
-- [ ] Deploy with Docker behind HTTPS. Set `GEMINI_API_KEY` and `VOXLIBERA_ADMIN_KEY` in `.env`.
+- [ ] Deploy with Docker behind HTTPS. Set `GEMINI_API_KEY` and `VOXLIBERA_ADMIN_KEY` in `.env` (the server refuses to start on a non-loopback host with no admin key, unless `VOXLIBERA_ALLOW_OPEN=1` is set for a closed venue network).
 - [ ] One room per stage in `rooms.yaml`, with the speakers' names and key terms in each `glossary`.
 - [ ] Open the **Dashboard** and press **▶ Play sample** on every stage: all cards should turn *Live* and show a "Last heard" sentence.
 - [ ] Print a QR code per stage pointing to `/?room=<stage>&lang=es` (and one per language if you like).
@@ -175,7 +176,7 @@ Pick the smallest setup that covers your event; every step keeps the same code a
 
 | Event size | Setup | What changes |
 |---|---|---|
-| **1–3 stages**, a meetup | `voxlibera-server` on a laptop, audience on the venue Wi-Fi | Nothing. Broadcast from the browser. |
+| **1–3 stages**, a meetup | `voxlibera-server` on a laptop, audience on the venue Wi-Fi | Set `VOXLIBERA_HOST=0.0.0.0` and `VOXLIBERA_ADMIN_KEY` so phones on the Wi-Fi can connect. Broadcast from the browser. |
 | **Up to ~25 stages** | One server (VM or `docker compose`) behind HTTPS, one API key | Set `VOXLIBERA_ADMIN_KEY`. One audio source per stage (browser or CLI). |
 | **More than ~25 stages** | **Shard stages across instances.** Each instance gets its own `rooms.yaml` subset and API key. A reverse proxy routes by room id. | Only config (see below). No code changes. |
 | **Thousands of viewers per stage** | Several replicas of one instance behind a load balancer; swap the in-memory broadcaster for **Redis Pub/Sub**. | ~40 lines: the [`Broadcaster`](voxlibera/broadcaster.py) interface is 3 methods (`publish`, `subscribe`, `unsubscribe`). |
@@ -249,9 +250,10 @@ Tip: update each stage's glossary with the next speaker's name and talk keywords
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Live transcription model. |
 | `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Translation model. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Stages served by this instance. |
-| `VOXLIBERA_ADMIN_KEY` | — | **Set it on any public deployment.** Required to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. |
+| `VOXLIBERA_ADMIN_KEY` | — | **Required whenever the server is exposed beyond localhost.** Needed to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. If the server binds to a non-loopback host with no key set, it refuses to start. |
+| `VOXLIBERA_ALLOW_OPEN` | — | Escape hatch for a closed venue network with no `VOXLIBERA_ADMIN_KEY`: set to `1` to start anyway (the server logs a loud warning). Leave unset for any deployment reachable from the internet. |
 | `VOXLIBERA_DATA_DIR` | `data/` | Where transcripts are persisted (JSONL per stage). |
-| `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `0.0.0.0` | Server bind address. |
+| `VOXLIBERA_PORT` / `VOXLIBERA_HOST` | `8000` / `127.0.0.1` | Server bind address. Only this machine by default; use `0.0.0.0` to accept other devices (requires `VOXLIBERA_ADMIN_KEY`). The Docker image sets `0.0.0.0`. |
 
 ---
 

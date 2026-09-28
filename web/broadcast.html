@@ -612,15 +612,16 @@
 
     function openIngestSocket(existingAdminKey) {
       const adminKey = existingAdminKey !== undefined ? existingAdminKey : getAdminKey();
-      const ingestPath = `/ws/ingest/${encodeURIComponent(selectedRoomId)}${
-        adminKey ? `?token=${encodeURIComponent(adminKey)}` : ""
-      }`;
+      const ingestPath = `/ws/ingest/${encodeURIComponent(selectedRoomId)}`;
       ingestSocket = new WebSocket(buildWebSocketUrl(ingestPath));
       ingestSocket.binaryType = "arraybuffer";
 
       setConnectionStatus("connection.connecting");
 
       ingestSocket.addEventListener("open", () => {
+        // The server always expects an auth message first, whether or not it requires a key.
+        // In open mode (no key configured) an empty token is accepted.
+        ingestSocket.send(JSON.stringify({ type: "auth", token: adminKey || "" }));
         isLive = true;
         setKeepPageAlive(true);
         startStopButton.textContent = t("broadcast.stop");

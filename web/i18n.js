@@ -150,7 +150,7 @@ const translations = {
     "common.adminKeyButton": "🔑 Clave de administrador",
     "common.enterAdminKey": "Ingresa la clave de administrador",
     "common.adminKeyPromptLabel": "Clave de administrador (dejar en blanco para borrarla):",
-    "common.adminKeyNeeded": "Esta acción necesita la clave de administrador. Ingresala:",
+    "common.adminKeyNeeded": "Esta acción necesita la clave de administrador. Ingrésala:",
     "common.wrongAdminKeyPrompt": "Clave de administrador incorrecta. Ingresa la clave correcta:",
     "common.couldNotReachServer": "No se pudo conectar con el servidor. Revisa tu conexión y recarga la página.",
     "common.copied": "¡Copiado!",

@@ -10,6 +10,7 @@ Examples:
 
 import argparse
 import asyncio
+import json
 import shutil
 import subprocess
 import sys
@@ -57,13 +58,14 @@ async def stream(arguments: argparse.Namespace) -> None:
 
     threading.Thread(target=pump, daemon=True).start()
     url = f"{arguments.server.rstrip('/')}/ws/ingest/{arguments.room}"
-    if arguments.token:
-        url += f"?token={arguments.token}"
 
     sent_bytes = 0
     last_report = -1
     try:
         async with websockets.connect(url, max_size=None) as connection:
+            # The server always expects an auth message first, whether or not it requires a key.
+            # In open mode (no key configured) an empty token is accepted.
+            await connection.send(json.dumps({"type": "auth", "token": arguments.token or ""}))
             print(f"Streaming to {url} (Ctrl+C to stop)")
             while (chunk := await queue.get()) is not None:
                 await connection.send(chunk)

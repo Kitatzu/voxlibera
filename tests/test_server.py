@@ -1,3 +1,6 @@
+import json
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -5,13 +8,25 @@ from voxlibera.config import Settings
 from voxlibera.server import create_app
 
 
+def wait_until(predicate, timeout_seconds: float = 2.0) -> None:
+    """Poll `predicate` until it is truthy; avoids sleep-based flakiness in async assertions."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    assert predicate()
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch) -> Settings:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
     rooms_file = tmp_path / "rooms.yaml"
     rooms_file.write_text("rooms:\n  - id: main\n    name: Main\n", encoding="utf-8")
-    return Settings(rooms_file=rooms_file, data_dir=tmp_path / "data", samples_dir=tmp_path / "samples",
-                    web_dir=tmp_path / "web")
+    return Settings(
+        rooms_file=rooms_file, data_dir=tmp_path / "data", samples_dir=tmp_path / "samples",
+        web_dir=tmp_path / "web", ingest_auth_timeout_seconds=0.2,
+    )
 
 
 def test_open_server_does_not_require_admin(settings):
@@ -32,13 +47,99 @@ def test_admin_actions_require_the_key(settings):
         assert response.status_code == 404  # path traversal rejected
 
 
-def test_ingest_rejects_wrong_key(settings):
+@pytest.fixture
+def no_op_transcriber(monkeypatch):
+    """Skip the real Gemini Live session so ingest tests can reach the audio loop."""
+    async def fake_start(self):
+        return None
+
+    monkeypatch.setattr("voxlibera.live_transcriber.LiveTranscriber.start", fake_start)
+    monkeypatch.setattr("voxlibera.live_transcriber.LiveTranscriber.stop", fake_start)
+
+
+def test_ingest_rejects_wrong_auth_message(settings):
     settings.admin_key = "secret"
     with TestClient(create_app(settings)) as client:
-        with client.websocket_connect("/ws/ingest/main?token=wrong") as websocket:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": "wrong"}))
             message = websocket.receive()
             assert message["type"] == "websocket.close"
             assert message["code"] == 4401
+
+
+def test_ingest_rejects_oversized_auth_message(settings):
+    settings.admin_key = "secret"
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": "secret", "padding": "x" * 2048}))
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 4401
+
+
+def test_ingest_query_string_token_no_longer_authenticates(settings):
+    # The token used to travel as ?token=<key>. It must now be ignored entirely: the server
+    # still requires the auth message even when the (correct) key is passed in the URL.
+    settings.admin_key = "secret"
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main?token=secret") as websocket:
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 4401
+
+
+def test_ingest_closes_with_4401_when_auth_message_never_arrives(settings):
+    settings.admin_key = "secret"
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 4401
+
+
+def test_ingest_accepts_correct_auth_message(settings, no_op_transcriber):
+    settings.admin_key = "secret"
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": "secret"}))
+            websocket.send_bytes(b"\x00" * 3200)
+            room = client.app.state.rooms["main"]
+            wait_until(lambda: room.audio_bytes == 3200)
+
+
+def test_ingest_open_mode_accepts_empty_token(settings, no_op_transcriber):
+    # No admin key configured: clients still send the auth message, with an empty token.
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": ""}))
+            websocket.send_bytes(b"\x00" * 3200)
+            room = client.app.state.rooms["main"]
+            wait_until(lambda: room.audio_bytes == 3200)
+
+
+def test_ingest_oversized_message_closes_with_1009(settings, no_op_transcriber):
+    settings.ingest_max_message_bytes = 100
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": ""}))
+            websocket.send_bytes(b"\x00" * 200)
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 1009
+
+
+def test_ingest_rate_limit_closes_with_4429(settings, no_op_transcriber):
+    settings.ingest_max_message_bytes = 10_000
+    settings.ingest_rate_limit_bytes_per_second = 100
+    settings.ingest_rate_window_seconds = 0.05  # tiny bucket: ~5 bytes of burst allowance
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/ingest/main") as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": ""}))
+            for _ in range(5):
+                websocket.send_bytes(b"\x00" * 1000)
+            message = websocket.receive()
+            assert message["type"] == "websocket.close"
+            assert message["code"] == 4429
 
 
 def test_stale_source_audio_is_ignored_after_a_new_source_starts(settings, monkeypatch):

@@ -16,7 +16,8 @@ COPY samples ./samples
 ENV VOXLIBERA_ROOMS_FILE=/app/rooms.yaml \
     VOXLIBERA_WEB_DIR=/app/web \
     VOXLIBERA_SAMPLES_DIR=/app/samples \
-    VOXLIBERA_DATA_DIR=/data
+    VOXLIBERA_DATA_DIR=/data \
+    VOXLIBERA_HOST=0.0.0.0
 
 VOLUME ["/data"]
 EXPOSE 8000
