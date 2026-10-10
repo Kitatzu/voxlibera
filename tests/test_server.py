@@ -195,6 +195,18 @@ def test_audience_unsubscribes_when_the_viewer_leaves(settings):
         wait_until(lambda: client.portal.call(broadcaster.subscriber_count, "main") == 0)
 
 
+def test_audience_binary_frame_closes_the_socket_cleanly(settings):
+    # Viewers never send binary frames; one must end that viewer's socket, not crash the handler.
+    app = create_app(settings)
+    broadcaster = app.state.broadcaster
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/rooms/main") as websocket:
+            websocket.receive_json()
+            websocket.send_bytes(b"unexpected")
+            assert websocket.receive()["type"] == "websocket.close"
+        wait_until(lambda: client.portal.call(broadcaster.subscriber_count, "main") == 0)
+
+
 def test_export_returns_attachment(settings):
     with TestClient(create_app(settings)) as client:
         response = client.get("/api/rooms/main/export?format=srt&lang=es")

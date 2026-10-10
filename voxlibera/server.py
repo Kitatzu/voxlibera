@@ -216,14 +216,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # An anyio task group (not bare asyncio tasks) so cancellation from the ASGI server
         # cooperates with Starlette's cancel scopes. Whichever side ends first stops the other.
         async def forward_events(task_group: anyio.abc.TaskGroup) -> None:
+            history_message = {"type": "history", "segments": room.history(), "status": room.status}
+            # Starlette raises RuntimeError when sending on a socket that is already closed.
             with contextlib.suppress(WebSocketDisconnect, RuntimeError):
-                await websocket.send_json({"type": "history", "segments": room.history(), "status": room.status})
+                await websocket.send_json(history_message)
                 while (message := await subscription.next_message()) is not None:
                     await websocket.send_json(message)
             task_group.cancel_scope.cancel()
 
         async def wait_for_disconnect(task_group: anyio.abc.TaskGroup) -> None:
-            with contextlib.suppress(WebSocketDisconnect, RuntimeError):
+            # KeyError: the viewer sent a binary frame, which the audience protocol never uses.
+            with contextlib.suppress(WebSocketDisconnect, RuntimeError, KeyError):
                 while True:
                     await websocket.receive_text()  # raises once the viewer leaves
             task_group.cancel_scope.cancel()
