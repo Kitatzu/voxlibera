@@ -173,6 +173,28 @@ def test_audience_needs_no_key_and_gets_history(settings):
             assert websocket.receive_json() == {"type": "history", "segments": [], "status": "idle"}
 
 
+def test_audience_receives_live_events_after_history(settings):
+    app = create_app(settings)
+    broadcaster = app.state.broadcaster
+    live_event = {"type": "segment", "id": 1, "text": "hello"}
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/rooms/main") as websocket:
+            assert websocket.receive_json()["type"] == "history"
+            # Publish on the app's event loop: the broadcaster's queues are not thread-safe.
+            client.portal.call(broadcaster.publish, "main", live_event)
+            assert websocket.receive_json() == live_event
+
+
+def test_audience_unsubscribes_when_the_viewer_leaves(settings):
+    app = create_app(settings)
+    broadcaster = app.state.broadcaster
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/rooms/main") as websocket:
+            websocket.receive_json()
+            assert client.portal.call(broadcaster.subscriber_count, "main") == 1
+        wait_until(lambda: client.portal.call(broadcaster.subscriber_count, "main") == 0)
+
+
 def test_export_returns_attachment(settings):
     with TestClient(create_app(settings)) as client:
         response = client.get("/api/rooms/main/export?format=srt&lang=es")
