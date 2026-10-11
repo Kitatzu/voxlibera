@@ -10,6 +10,8 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 
+import anyio
+import anyio.abc
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -93,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Vox Libera", lifespan=lifespan)
     app.state.rooms = rooms
+    app.state.broadcaster = broadcaster
 
     def get_room(room_id: str) -> Room:
         room = rooms.get(room_id)
@@ -210,22 +213,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return
         subscription = broadcaster.subscribe(room_id)
 
-        async def forward_events() -> None:
-            await websocket.send_json({"type": "history", "segments": room.history(), "status": room.status})
-            while (message := await subscription.next_message()) is not None:
-                await websocket.send_json(message)
+        # An anyio task group (not bare asyncio tasks) so cancellation from the ASGI server
+        # cooperates with Starlette's cancel scopes. Whichever side ends first stops the other.
+        async def forward_events(task_group: anyio.abc.TaskGroup) -> None:
+            history_message = {"type": "history", "segments": room.history(), "status": room.status}
+            # Starlette raises RuntimeError when sending on a socket that is already closed.
+            with contextlib.suppress(WebSocketDisconnect, RuntimeError):
+                await websocket.send_json(history_message)
+                while (message := await subscription.next_message()) is not None:
+                    await websocket.send_json(message)
+            task_group.cancel_scope.cancel()
 
-        async def wait_for_disconnect() -> None:
-            while True:
-                await websocket.receive_text()  # raises once the viewer leaves
+        async def wait_for_disconnect(task_group: anyio.abc.TaskGroup) -> None:
+            # KeyError: the viewer sent a binary frame, which the audience protocol never uses.
+            with contextlib.suppress(WebSocketDisconnect, RuntimeError, KeyError):
+                while True:
+                    await websocket.receive_text()  # raises once the viewer leaves
+            task_group.cancel_scope.cancel()
 
-        tasks = [asyncio.create_task(forward_events()), asyncio.create_task(wait_for_disconnect())]
         try:
-            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            async with anyio.create_task_group() as task_group:
+                task_group.start_soon(forward_events, task_group)
+                task_group.start_soon(wait_for_disconnect, task_group)
         finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
             broadcaster.unsubscribe(room_id, subscription)
             with contextlib.suppress(Exception):
                 await websocket.close()
