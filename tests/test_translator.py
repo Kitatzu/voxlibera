@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from voxlibera import translator as translator_module
+from voxlibera.translation.gemini import GeminiTranslationAdapter
+from voxlibera.translation.provider import ProviderReply
 from voxlibera.translator import MAX_CONCURRENT_REQUESTS, TranslationResult, Translator
 
 
@@ -40,7 +42,9 @@ class FakeGenaiClient:
 
 
 def build_translator(client, target_languages=("es", "en"), glossary=(), context=""):
-    return Translator(client, "fake-model", list(target_languages), list(glossary), context)
+    return Translator(
+        GeminiTranslationAdapter(client, "fake-model"), list(target_languages), list(glossary), context
+    )
 
 
 async def test_returns_a_cleaned_translation_for_every_target_language():
@@ -195,3 +199,77 @@ async def test_unknown_language_codes_are_still_requested(unknown_code):
     result = await build_translator(client, target_languages=(unknown_code,)).translate("Hi", None)
 
     assert result.translations == {unknown_code: "ok"}
+
+
+class FakeTranslationProvider:
+    """Implements the TranslationProvider port with canned replies, no genai involved."""
+
+    def __init__(self, behaviours):
+        self._behaviours = list(behaviours)
+        self.requests = []
+
+    async def generate(self, request):
+        self.requests.append(request)
+        behaviour = self._behaviours.pop(0)
+        if isinstance(behaviour, Exception):
+            raise behaviour
+        return behaviour
+
+
+async def test_orchestrator_works_with_any_provider_and_adds_the_latency():
+    provider = FakeTranslationProvider([ProviderReply('{"es": "Hola", "en": "Hi"}', 5, 3)])
+    translator = Translator(provider, ["es", "en"], [], "")
+
+    result = await translator.translate("Hi", None)
+
+    assert result.translations == {"es": "Hola", "en": "Hi"}
+    assert (result.input_tokens, result.output_tokens) == (5, 3)
+    assert result.latency_ms >= 0
+
+
+async def test_the_request_handed_to_the_provider_is_complete():
+    provider = FakeTranslationProvider([ProviderReply('{"es": "Hola"}')])
+    translator = Translator(provider, ["es"], ["URI"], "A talk")
+
+    await translator.translate("Second", "First")
+
+    request = provider.requests[0]
+    assert request.target_languages == ["es"]
+    assert "Glossary: URI" in request.system_instruction
+    assert request.prompt.endswith("Sentence to translate: Second")
+
+
+async def test_a_provider_error_is_retried_once_then_succeeds():
+    provider = FakeTranslationProvider([ConnectionError("boom"), ProviderReply('{"es": "Hola"}')])
+
+    result = await Translator(provider, ["es"], [], "").translate("Hi", None)
+
+    assert result.translations == {"es": "Hola"}
+    assert len(provider.requests) == 2
+
+
+async def test_two_provider_errors_give_none():
+    provider = FakeTranslationProvider([ConnectionError("a"), ConnectionError("b")])
+
+    assert await Translator(provider, ["es"], [], "").translate("Hi", None) is None
+
+
+async def test_an_empty_reply_text_yields_empty_translations_not_a_failure():
+    provider = FakeTranslationProvider([ProviderReply("")])
+
+    result = await Translator(provider, ["es"], [], "").translate("Hi", None)
+
+    assert result.translations == {}
+    assert len(provider.requests) == 1
+
+
+async def test_gemini_adapter_requests_json_with_minimal_thinking_and_no_tools():
+    client = FakeGenaiClient([make_response({"es": "Hola", "en": "Hi"})])
+
+    await build_translator(client).translate("Hi", None)
+
+    config = client.calls[0]["config"]
+    assert config.response_mime_type == "application/json"
+    assert config.max_output_tokens == 1024
+    assert config.thinking_config.thinking_level.name == "MINIMAL"
+    assert config.automatic_function_calling.disable is True

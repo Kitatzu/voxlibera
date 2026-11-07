@@ -16,6 +16,7 @@ from voxlibera.exporters import EXPORTERS
 from voxlibera.live_transcriber import LiveTranscriber, TranscriptCallbacks
 from voxlibera.models import RoomConfig, Segment
 from voxlibera.segmenter import SegmenterUpdate, SentenceSegmenter
+from voxlibera.translation.gemini import GeminiTranslationAdapter
 from voxlibera.translator import Translator
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class Room:
         self._segmenter = SentenceSegmenter()
         self._transcriber: LiveTranscriber | None = None
         self._translator = Translator(
-            client, settings.translate_model, settings.target_languages,
+            GeminiTranslationAdapter(client, settings.translate_model), settings.target_languages,
             config.glossary, f"{config.name}: {config.description}",
         )
         self._background_tasks: set[asyncio.Task] = set()
