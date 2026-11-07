@@ -9,6 +9,8 @@ from voxlibera.models import RoomConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
 # Hosts that only accept connections from the same machine. Binding to anything else without an
 # admin key would let anyone on the network broadcast fake audio or wipe transcripts.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -61,6 +63,10 @@ def evaluate_startup_security(
 class Settings:
     transcribe_model: str = "gemini-3.5-transcribe-live"
     translate_model: str = "gemini-3.5-flash-lite"
+    # "gemini" (default) or "openai": any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, LM Studio).
+    translation_provider: str = "gemini"
+    translation_base_url: str = OPENAI_BASE_URL
+    translation_api_key: str | None = field(default=None, repr=False)  # a secret: keep it out of logs
     target_languages: list[str] = field(default_factory=lambda: ["es", "en", "pt"])
     rooms_file: Path = PROJECT_ROOT / "rooms.yaml"
     samples_dir: Path = PROJECT_ROOT / "samples"
@@ -85,6 +91,28 @@ class Settings:
         settings = cls()
         settings.transcribe_model = os.environ.get("VOXLIBERA_TRANSCRIBE_MODEL", settings.transcribe_model)
         settings.translate_model = os.environ.get("VOXLIBERA_TRANSLATE_MODEL", settings.translate_model)
+        settings.translation_provider = (
+            os.environ.get("VOXLIBERA_TRANSLATION_PROVIDER") or settings.translation_provider
+        ).strip().lower()
+        settings.translation_base_url = (
+            os.environ.get("VOXLIBERA_TRANSLATION_BASE_URL") or settings.translation_base_url
+        )
+        settings.translation_api_key = (
+            os.environ.get("VOXLIBERA_TRANSLATION_API_KEY") or os.environ.get("OPENAI_API_KEY") or None
+        )
+        if settings.translation_provider != "gemini":
+            # The default prices are Gemini's. Another provider (or a local model) would show a
+            # made-up cost on the dashboard, so start from zero and let the operator set real ones.
+            settings.translation_usd_per_million_input_tokens = 0.0
+            settings.translation_usd_per_million_output_tokens = 0.0
+        settings.translation_usd_per_million_input_tokens = _price_from_environment(
+            "VOXLIBERA_TRANSLATION_USD_PER_MILLION_INPUT_TOKENS",
+            settings.translation_usd_per_million_input_tokens,
+        )
+        settings.translation_usd_per_million_output_tokens = _price_from_environment(
+            "VOXLIBERA_TRANSLATION_USD_PER_MILLION_OUTPUT_TOKENS",
+            settings.translation_usd_per_million_output_tokens,
+        )
         languages = os.environ.get("VOXLIBERA_TARGET_LANGUAGES")
         if languages:
             settings.target_languages = [code.strip() for code in languages.split(",") if code.strip()]
@@ -100,6 +128,16 @@ class Settings:
             os.environ.get("VOXLIBERA_ADMIN_KEY") or os.environ.get("VOXLIBERA_INGEST_TOKEN") or None
         )
         return settings
+
+
+def _price_from_environment(variable: str, default: float) -> float:
+    value = os.environ.get(variable)
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{variable} must be a number (USD per million tokens), got '{value}'") from None
 
 
 def env_flag_is_set(value: str | None) -> bool:

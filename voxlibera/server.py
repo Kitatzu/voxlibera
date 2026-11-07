@@ -30,6 +30,7 @@ from voxlibera.config import (
 )
 from voxlibera.exporters import EXPORTERS, MEDIA_TYPES
 from voxlibera.room import Room
+from voxlibera.translation.factory import create_translation_provider
 
 logger = logging.getLogger("voxlibera")
 
@@ -86,12 +87,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "GEMINI_API_KEY is not set. Get a key at https://aistudio.google.com/apikey and "
                 "put GEMINI_API_KEY=your-key in a .env file in the project folder."
             )
-        client = genai.Client()  # reads GEMINI_API_KEY
-        for room_config in load_rooms(settings.rooms_file):
-            rooms[room_config.id] = Room(room_config, settings, client, broadcaster)
-        logger.info("Serving rooms: %s", ", ".join(rooms))
-        yield
-        await asyncio.gather(*(room.stop_source() for room in rooms.values()), return_exceptions=True)
+        client = genai.Client()  # reads GEMINI_API_KEY; transcription always uses Gemini Live
+        translation_provider = create_translation_provider(settings, client)
+        try:
+            for room_config in load_rooms(settings.rooms_file):
+                rooms[room_config.id] = Room(room_config, settings, client, broadcaster, translation_provider)
+            logger.info(
+                "Serving rooms: %s (translation: %s)", ", ".join(rooms), settings.translation_provider
+            )
+            yield
+            await asyncio.gather(*(room.stop_source() for room in rooms.values()), return_exceptions=True)
+        finally:
+            # Also runs when startup fails halfway, so the shared HTTP client never leaks.
+            close_provider = getattr(translation_provider, "aclose", None)
+            if close_provider is not None:
+                await close_provider()
 
     app = FastAPI(title="Vox Libera", lifespan=lifespan)
     app.state.rooms = rooms

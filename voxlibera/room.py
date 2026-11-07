@@ -16,7 +16,7 @@ from voxlibera.exporters import EXPORTERS
 from voxlibera.live_transcriber import LiveTranscriber, TranscriptCallbacks
 from voxlibera.models import RoomConfig, Segment
 from voxlibera.segmenter import SegmenterUpdate, SentenceSegmenter
-from voxlibera.translation.gemini import GeminiTranslationAdapter
+from voxlibera.translation.provider import TranslationProvider
 from voxlibera.translator import Translator
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ SMOOTHING = 0.2  # exponential moving average weight for latency metrics
 
 class Room:
     def __init__(self, config: RoomConfig, settings: Settings, client: genai.Client,
-                 broadcaster: Broadcaster) -> None:
+                 broadcaster: Broadcaster, translation_provider: TranslationProvider) -> None:
         self.config = config
         self.settings = settings
         self.client = client
@@ -46,8 +46,7 @@ class Room:
         self._segmenter = SentenceSegmenter()
         self._transcriber: LiveTranscriber | None = None
         self._translator = Translator(
-            GeminiTranslationAdapter(client, settings.translate_model), settings.target_languages,
-            config.glossary, f"{config.name}: {config.description}",
+            translation_provider, settings.target_languages, config.glossary, f"{config.name}: {config.description}",
         )
         self._background_tasks: set[asyncio.Task] = set()
         self._simulation_process = None

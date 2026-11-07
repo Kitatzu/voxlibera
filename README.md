@@ -254,7 +254,11 @@ Tip: update each stage's glossary with the next speaker's name and talk keywords
 | `GEMINI_API_KEY` | — | **Required.** Gemini API key. |
 | `VOXLIBERA_TARGET_LANGUAGES` | `es,en,pt` | Translation targets (BCP-47 codes). |
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Live transcription model. |
-| `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Translation model. |
+| `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Translation model. With `VOXLIBERA_TRANSLATION_PROVIDER=openai` you must set it to a model your endpoint serves (for example `gpt-5-mini` or `gemma3:4b`). |
+| `VOXLIBERA_TRANSLATION_PROVIDER` | `gemini` | `gemini` or `openai`. `openai` works with any OpenAI-compatible endpoint: OpenAI itself, or a local Ollama, vLLM or LM Studio. Transcription always uses Gemini Live. |
+| `VOXLIBERA_TRANSLATION_BASE_URL` | `https://api.openai.com/v1` | Endpoint used by the `openai` provider. For Ollama: `http://localhost:11434/v1`. |
+| `VOXLIBERA_TRANSLATION_API_KEY` | — | Key for the translation endpoint (falls back to `OPENAI_API_KEY`). Not needed for local servers. |
+| `VOXLIBERA_TRANSLATION_USD_PER_MILLION_INPUT_TOKENS` / `…_OUTPUT_TOKENS` | `0.30` / `2.50` with Gemini, `0` otherwise | Prices for the dashboard cost estimate. Set them if you use a paid non-Gemini model. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Stages served by this instance. |
 | `VOXLIBERA_ADMIN_KEY` | — | **Required whenever the server is exposed beyond localhost.** Needed to broadcast audio and to use the dashboard actions (the pages ask for it once). The audience never needs it. If the server binds to a non-loopback host with no key set, it refuses to start. |
 | `VOXLIBERA_ALLOW_OPEN` | — | Escape hatch for a closed venue network with no `VOXLIBERA_ADMIN_KEY`: set to `1` to start anyway (the server logs a loud warning). Leave unset for any deployment reachable from the internet. |
@@ -309,7 +313,7 @@ Ideas for the next iterations, roughly by impact.
 
 **For scale and independence**
 - [ ] **Redis Pub/Sub broadcaster**, included and tested, for multi-replica deployments.
-- [ ] **Fully local mode** with Gemma or Whisper for events with no budget or no internet. The transcriber and translator are isolated modules for this swap.
+- [ ] **Fully local mode** for events with no budget or no internet. Translation can already run locally (Ollama, vLLM or LM Studio via `VOXLIBERA_TRANSLATION_PROVIDER=openai`); transcription still needs Gemini Live, so a local transcriber (for example Whisper) is the missing piece.
 - [ ] **Load tests** in CI, plus one-click deploy templates (Cloud Run, Fly.io, Render).
 - [ ] **More input languages** (Portuguese talks, for example): the model already detects the language automatically; this needs testing and tuning.
 
@@ -322,7 +326,7 @@ Ideas for the next iterations, roughly by impact.
 - **Translated captions arrive later in fast, run-on speech.** A sentence is translated once its punctuation stops changing. In English talks that takes ~1 s after the sentence ends; with a fast Spanish speaker who chains clauses with "y…", ~4 s. The original-language text is always live (< 1 s). Next step: commit long sentences at clause boundaries.
 - Speaker diarization and word-level timestamps are not available in the Live API; subtitle timing is sentence-level.
 - Live translation of a sentence can differ slightly from the final transcript; the corrected version replaces it on screen and in exports.
-- A fully local mode (Gemma) is not implemented yet; the transcriber and translator are isolated modules to make that swap possible.
+- A fully local mode is not implemented yet: translation can run locally, but transcription still depends on Gemini Live.
 
 ## License
 

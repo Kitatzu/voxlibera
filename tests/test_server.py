@@ -212,3 +212,57 @@ def test_export_returns_attachment(settings):
         response = client.get("/api/rooms/main/export?format=srt&lang=es")
         assert response.status_code == 200
         assert "attachment" in response.headers["content-disposition"]
+
+
+def test_server_builds_the_configured_translation_provider_once_and_closes_it(settings, monkeypatch):
+    from voxlibera.translation.openai_compatible import OpenAICompatibleAdapter
+
+    closed = []
+
+    async def record_close(self):
+        closed.append(self)
+
+    monkeypatch.setattr(OpenAICompatibleAdapter, "aclose", record_close)
+    settings.translation_provider = "openai"
+    settings.translate_model = "gemma3:4b"
+    settings.translation_base_url = "http://localhost:11434/v1"
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        providers = {id(room._translator.provider) for room in app.state.rooms.values()}
+        assert len(providers) == 1  # one shared provider (and HTTP client) for every room
+        assert isinstance(next(iter(app.state.rooms.values()))._translator.provider, OpenAICompatibleAdapter)
+        assert client.get("/healthz").status_code == 200
+
+    assert len(closed) == 1
+
+
+def test_server_refuses_to_start_with_a_translation_provider_that_cannot_work(settings):
+    from voxlibera.translation.factory import TranslationConfigError
+
+    settings.translation_provider = "openai"  # translate_model is still the Gemini default
+
+    with pytest.raises(TranslationConfigError, match="VOXLIBERA_TRANSLATE_MODEL"):
+        with TestClient(create_app(settings)):
+            pass
+
+
+def test_server_closes_the_translation_provider_even_when_startup_fails(settings, monkeypatch, tmp_path):
+    from voxlibera.translation.openai_compatible import OpenAICompatibleAdapter
+
+    closed = []
+
+    async def record_close(self):
+        closed.append(self)
+
+    monkeypatch.setattr(OpenAICompatibleAdapter, "aclose", record_close)
+    settings.translation_provider = "openai"
+    settings.translate_model = "gemma3:4b"
+    settings.translation_base_url = "http://localhost:11434/v1"
+    settings.rooms_file = tmp_path / "missing-rooms.yaml"
+
+    with pytest.raises(FileNotFoundError):
+        with TestClient(create_app(settings)):
+            pass
+
+    assert len(closed) == 1
