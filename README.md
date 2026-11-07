@@ -285,7 +285,8 @@ pytest
 |---|---|
 | [`voxlibera/live_transcriber.py`](voxlibera/live_transcriber.py) | Gemini Live sessions, GoAway rotation, reconnection. |
 | [`voxlibera/segmenter.py`](voxlibera/segmenter.py) | Interim transcripts → stable sentences + corrections. |
-| [`voxlibera/translator.py`](voxlibera/translator.py) | One-call multi-language translation with glossary. |
+| [`voxlibera/translator.py`](voxlibera/translator.py) | One-call multi-language translation with glossary. Provider-agnostic: handles concurrency, timeout and retry. |
+| [`voxlibera/translation/`](voxlibera/translation) | The `TranslationProvider` port, the shared prompt, and the Gemini adapter. New providers plug in here. |
 | [`voxlibera/room.py`](voxlibera/room.py) | Per-stage pipeline, metrics, persistence. |
 | [`voxlibera/server.py`](voxlibera/server.py) | FastAPI REST + WebSocket API, static frontend. |
 | [`voxlibera/source.py`](voxlibera/source.py) | Audio source CLI (file, mic, stream, YouTube). |
