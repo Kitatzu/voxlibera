@@ -1,5 +1,7 @@
 # Vox Libera
 
+[![CI](https://github.com/Kitatzu/voxlibera/actions/workflows/ci.yml/badge.svg)](https://github.com/Kitatzu/voxlibera/actions/workflows/ci.yml)
+
 [English](README.md) · **Español**
 
 **Subtítulos y traducción en vivo, open source, para conferencias con varios escenarios.**
