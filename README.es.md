@@ -261,7 +261,7 @@ escenario con el nombre del próximo orador y las palabras clave de su charla.
 | `VOXLIBERA_TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | Modelo de transcripción en vivo. |
 | `VOXLIBERA_TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | Modelo de traducción. Con `VOXLIBERA_TRANSLATION_PROVIDER=openai` tienes que indicar un modelo que sirva tu endpoint (por ejemplo `gpt-5-mini` o `gemma3:4b`). |
 | `VOXLIBERA_TRANSLATION_PROVIDER` | `gemini` | `gemini` u `openai`. `openai` funciona con cualquier endpoint compatible con OpenAI: OpenAI mismo, o un Ollama, vLLM o LM Studio local. La transcripción siempre usa Gemini Live. |
-| `VOXLIBERA_TRANSLATION_BASE_URL` | `https://api.openai.com/v1` | Endpoint que usa el proveedor `openai`. Para Ollama: `http://localhost:11434/v1`. |
+| `VOXLIBERA_TRANSLATION_BASE_URL` | `https://api.openai.com/v1` | Endpoint que usa el proveedor `openai`. Para Ollama: `http://localhost:11434/v1`. Gemini también tiene uno: `https://generativelanguage.googleapis.com/v1beta/openai/` (usa tu clave de Gemini como `VOXLIBERA_TRANSLATION_API_KEY`). |
 | `VOXLIBERA_TRANSLATION_API_KEY` | — | Clave del endpoint de traducción (si no está, se usa `OPENAI_API_KEY`). No hace falta en servidores locales. |
 | `VOXLIBERA_TRANSLATION_USD_PER_MILLION_INPUT_TOKENS` / `…_OUTPUT_TOKENS` | `0.30` / `2.50` con Gemini, `0` en otro caso | Precios para la estimación de costo del panel. Defínelos si usas un modelo de pago que no sea Gemini. |
 | `VOXLIBERA_ROOMS_FILE` | `rooms.yaml` | Escenarios que sirve esta instancia. |
