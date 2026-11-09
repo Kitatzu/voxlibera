@@ -110,7 +110,7 @@ def test_a_local_server_needs_no_api_key():
     assert isinstance(create_translation_provider(settings, gemini_client=object()), OpenAICompatibleAdapter)
 
 
-def test_openai_with_the_gemini_default_model_is_rejected():
+def test_a_gemini_model_name_against_the_openai_endpoint_is_rejected():
     settings = Settings(translation_provider="openai", translation_api_key="sk-test")
 
     with pytest.raises(TranslationConfigError, match="VOXLIBERA_TRANSLATE_MODEL"):
@@ -127,3 +127,25 @@ def test_hosted_openai_without_a_key_is_rejected():
 def test_an_unknown_provider_is_rejected_and_named():
     with pytest.raises(TranslationConfigError, match="'claude'"):
         create_translation_provider(Settings(translation_provider="claude"), gemini_client=object())
+
+
+GEMINI_OPENAI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def test_a_gemini_model_is_accepted_on_geminis_own_openai_compatible_endpoint():
+    settings = Settings(
+        translation_provider="openai",
+        translate_model="gemini-3.5-flash-lite",
+        translation_base_url=GEMINI_OPENAI_ENDPOINT,
+        translation_api_key="gemini-key",
+    )
+
+    assert isinstance(create_translation_provider(settings, gemini_client=object()), OpenAICompatibleAdapter)
+
+
+def test_a_non_openai_endpoint_without_a_key_is_not_blocked():
+    settings = Settings(
+        translation_provider="openai", translate_model="gemini-3.5-flash-lite", translation_base_url=GEMINI_OPENAI_ENDPOINT
+    )
+
+    assert isinstance(create_translation_provider(settings, gemini_client=object()), OpenAICompatibleAdapter)

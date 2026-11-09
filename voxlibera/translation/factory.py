@@ -21,12 +21,16 @@ def create_translation_provider(settings: Settings, gemini_client: genai.Client)
     if provider_name == "gemini":
         return GeminiTranslationAdapter(gemini_client, settings.translate_model)
     if provider_name == "openai":
-        if settings.translate_model.startswith("gemini"):
+        uses_hosted_openai = urlparse(settings.translation_base_url).hostname == HOSTED_OPENAI_HOST
+        # A Gemini model name is only a mistake against OpenAI itself: Gemini also serves an
+        # OpenAI-compatible endpoint where that name is exactly right.
+        if uses_hosted_openai and settings.translate_model.startswith("gemini"):
             raise TranslationConfigError(
-                "VOXLIBERA_TRANSLATION_PROVIDER=openai needs VOXLIBERA_TRANSLATE_MODEL set to a model "
-                f"the endpoint serves (for example gpt-5-mini or gemma3:4b), not '{settings.translate_model}'."
+                "VOXLIBERA_TRANSLATION_PROVIDER=openai with the default OpenAI endpoint needs "
+                "VOXLIBERA_TRANSLATE_MODEL set to an OpenAI model (for example gpt-5-mini), "
+                f"not '{settings.translate_model}'."
             )
-        if not settings.translation_api_key and urlparse(settings.translation_base_url).hostname == HOSTED_OPENAI_HOST:
+        if uses_hosted_openai and not settings.translation_api_key:
             raise TranslationConfigError(
                 "Translating with OpenAI needs an API key: set VOXLIBERA_TRANSLATION_API_KEY (or "
                 "OPENAI_API_KEY). Local servers such as Ollama do not need one."
